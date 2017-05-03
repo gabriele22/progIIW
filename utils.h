@@ -39,23 +39,18 @@ void usage(const char *p);
 void get_opt(int argc, char **argv, char **path, int *perc);
 void map_html_error(char *HTML[3]);
 void init(int argc, char **argv);
-void start_server(void);
+void listen_connections(void);
 void catch_signal(void);
 void start_multiplexing_io(void);
 void check_stdin(void);
-void rm_link(char *path);
-int quality(char *h_accept);
+void remove_file(char *path);
+int parse_q_factor(char *h_accept);
 char *get_img(char *name, size_t img_dim, char *directory);
 int data_to_send(int sock, char **line);
-void split_str(char *s, char **d);
-void respond(int sock, struct sockaddr_in client);
+void parse_http(char *s, char **d);
 char *get_time(void);
 ssize_t send_http_msg(int sd, char *s, ssize_t dim);
 void free_time_http(char *time, char *http);
 
-
-//--------------------------------------------------
-ssize_t	writen(int fd, const void *buf, size_t n);
-int	readline(int fd, void *vptr, int maxlen);
 
 #endif //PROGETTOIIW_UTILS_H
