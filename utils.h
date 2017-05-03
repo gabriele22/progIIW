@@ -44,7 +44,7 @@ void catch_signal(void);
 void start_multiplexing_io(void);
 void check_stdin(void);
 void remove_file(char *path);
-int parse_q_factor(char *h_accept);
+int quality(char *h_accept);
 char *get_img(char *name, size_t img_dim, char *directory);
 int data_to_send(int sock, char **line);
 void parse_http(char *s, char **d);

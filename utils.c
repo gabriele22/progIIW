@@ -53,7 +53,7 @@ struct cache {
     // Quality factor
     int q;
     // type string: "%s_%d";
-    //     %s is the name of the image; %d is the factor parse_q_factor (above int q)
+    //     %s is the name of the image; %d is the factor quality (above int q)
     char img_q[DIM / 2];
     size_t size_q;
     struct cache *next_img_c;
@@ -666,7 +666,7 @@ void check_images(int perc) {
 
     // %s page's title; %s header; %s text.
     char *h = "<!DOCTYPE html><html><head><meta charset=\"utf-8\" /><title>%s</title><style type=\"text/css\"></style><script type=\"text/javascript\"></script></head><body backgrod=\"\"><h1>%s</h1><br><br><h3>%s</h3><hr><br>";
-    sprintf(html, h, "WebServerProject", "Welcome", "Select an image below");
+    sprintf(html, h, "ProjectIIW", "Welcome", "");
     // %s image's path; %d resizing percentage
     char *convert = "convert %s -resize %d%% %s;exit";
     size_t len_h = strlen(html), new_len_h;
@@ -801,7 +801,7 @@ void remove_file(char *path) {
     }
 }
 
-int parse_q_factor(char *h_accept) {
+int quality(char *h_accept) {
     double images, others, q;
     images = others = q = -2.0;
     char *chr, *t1 = strtok(h_accept, ",");
@@ -846,7 +846,7 @@ int parse_q_factor(char *h_accept) {
     else if (others > images && images == -2.0)
         q = others;
     else
-        fprintf(stderr, "string: %s\t\tparse_q_factor: Unexpected error\n", h_accept);
+        fprintf(stderr, "string: %s\t\tquality: Unexpected error\n", h_accept);
 
     return (int) (q *= 100);
 }
@@ -1047,7 +1047,7 @@ int data_to_send(int sock, char **line) {
                     memset(name_cached_img, (int) '\0', sizeof(char) * DIM / 2);
                     struct cache *c;
                     int def_val = 70;
-                    int processing_accept = parse_q_factor(line[5]);
+                    int processing_accept = quality(line[5]);
                     if (processing_accept == -1)
                         fprintf(stderr, "data_to_send: Unexpected error in strtod\n");
                     int q = processing_accept < 0 ? def_val : processing_accept;
@@ -1084,7 +1084,7 @@ int data_to_send(int sock, char **line) {
                     }
 
                     if (!c) {
-                        // %s = image's name; %d = factor parse_q_factor (between 1 and 99)
+                        // %s = image's name; %d = factor quality (between 1 and 99)
                         sprintf(name_cached_img, "%s_%d", p_name, q);
                         char path[DIM / 2];
                         memset(path, (int) '\0', DIM / 2);
@@ -1094,8 +1094,8 @@ int data_to_send(int sock, char **line) {
                             // Cache of limited size
                             // If it has not yet reached
                             //  the maximum cache size
-                            // %s/%s = path/name_image; %d = factor parse_q_factor
-                            char *format = "convert %s/%s -parse_q_factor %d %s/%s;exit";
+                            // %s/%s = path/name_image; %d = factor quality
+                            char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
                             sprintf(command, format, IMG_PATH, p_name, q, tmp_cache, name_cached_img);
@@ -1200,8 +1200,8 @@ int data_to_send(int sock, char **line) {
                                 return -1;
                             }
 
-                            // %s/%s = path/name_image; %d = factor parse_q_factor
-                            char *format = "convert %s/%s -parse_q_factor %d %s/%s;exit";
+                            // %s/%s = path/name_image; %d = factor quality
+                            char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
                             sprintf(command, format, IMG_PATH, p_name, q, tmp_cache, name_cached_img);
@@ -1315,8 +1315,8 @@ int data_to_send(int sock, char **line) {
                         } else {
                             // In the case where it is not place
                             //  a limit on the size of the cache
-                            // %s/%s = path/name_image; %d = factor parse_q_factor
-                            char *format = "convert %s/%s -parse_q_factor %d %s/%s;exit";
+                            // %s/%s = path/name_image; %d = factor quality
+                            char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
                             sprintf(command, format, IMG_PATH, p_name, q, tmp_cache, name_cached_img);
