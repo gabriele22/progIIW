@@ -3,5 +3,5 @@ project(progettoIIW)
 
 set(CMAKE_C_STANDARD 99)
 
-set(SOURCE_FILES main.c)
+set(SOURCE_FILES server.c utils.c utils.h basic.h)
 add_executable(progettoIIW ${SOURCE_FILES})
