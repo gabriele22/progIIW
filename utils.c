@@ -250,12 +250,11 @@ void parse_http(char *s, char **d);
 void start_multiplexing_io(void){
 
     int			connsd, socksd;
-    int			i;
+    int			i,x;
     int			ready;
     ssize_t		n;
     struct sockaddr_in	 cliaddr;
     socklen_t		len;
-    int errRead;
     char http_req[DIM * DIM];
     char *line_req[7];
 
@@ -265,7 +264,6 @@ void start_multiplexing_io(void){
 
 
     for ( ; ; ) {
-        errRead=0;
         rset = allset;  /* Setta il set di descrittori per la lettura */
         /* ready è il numero di descrittori pronti */
         if ((ready = select(maxd+1, &rset, NULL, NULL, NULL)) < 0) {
@@ -358,17 +356,11 @@ void start_multiplexing_io(void){
                 continue;
 
             if (FD_ISSET(socksd, &rset)) {
-                // Se socksd è leggibile, invoca la readline
-                struct timeval tv;
-                tv.tv_sec = 10;
-                tv.tv_usec = 0;
-                if (setsockopt(socksd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(struct timeval)) < 0)
-                    fprintf(stderr, "respond: Error in setsockopt\n");
-
+                // Se socksd è leggibile, invoca la recv
 
                 memset(http_req, (int) '\0', 5 * DIM);
-                for (i = 0; i < 7; ++i)
-                    line_req[i] = NULL;
+                for (x = 0; x < 7; ++x)
+                    line_req[x] = NULL;
 
                 errno=0;
 
@@ -377,43 +369,68 @@ void start_multiplexing_io(void){
 
                 if (n <0) {
                     switch (errno) {
+                        case EACCES:
+                            fprintf(stderr, "EACCES");
+                            break;
+                        case ECONNRESET:
+                            fprintf(stderr, "ECONNRESET");
+                            break;
+                        case EDESTADDRREQ:
+                            fprintf(stderr, "EDESTADRREQ");
+                            break;
+                        case EISCONN:
+                            fprintf(stderr, "EISCONN");
+                            break;
+                        case EMSGSIZE:
+                            fprintf(stderr, "EMGSIZE");
+                            break;
+                        case ENOBUFS:
+                            fprintf(stderr, "ENOBUFS");
+                            break;
+                        case ENOMEM:
+                            fprintf(stderr, "ENOMEM");
+                            break;
+                        case EOPNOTSUPP:
+                            fprintf(stderr, "EOPTNOTSUPP");
+                            break;
+                        case EPIPE:
+                            fprintf(stderr, "EPIPE");
+                            break;
                         case EFAULT:
                             fprintf(stderr, "The receive  buffer  pointer(s)  point  outside  the  process's address space");
-                            errRead=1;
+                            break;
 
-                        case EBADF:
+                       /* case EBADF:
                             fprintf(stderr, "The argument of recv() is an invalid descriptor: %d\n", socksd);
-                            errRead=1;
+                            break;*/
 
                         case ECONNREFUSED:
                             fprintf(stderr, "Remote host refused to allow the network connection\n");
-                            errRead=1;
+                            break;
 
                         case ENOTSOCK:
                             fprintf(stderr, "The argument of recv() does not refer to a socket\n");
-                            errRead=1;
+                            break;
 
                         case EINVAL:
                             fprintf(stderr, "Invalid argument passed\n");
-                            errRead=1;
+                            break;
 
                         case EINTR:
                             fprintf(stderr, "Timeout receiving from socket\n");
-                            errRead=1;
+                            break;
 
                         case EWOULDBLOCK:
                             fprintf(stderr, "Timeout receiving from socket\n");
-                            errRead=1;
+                            break;
 
                         default:
                             fprintf(stderr, "Error in recv: error while receiving data from client\n");
-                            errRead=1;
                     }
 
                 }
 
-
-                if ((n == 0)) {
+                if ((n == 0 )) {
                     // Se legge EOF, chiude il descrittore di connessione
                     if (close(socksd) == -1) {
                         perror("errore in close");
@@ -426,9 +443,8 @@ void start_multiplexing_io(void){
                     client[i] = -1;
                     memset((void *)&esito, 0,sizeof(esito));
 
-                }
-                else /* echo */{
-                    do{
+                }else {
+
                         //printf("\n\n%s\n\n", http_req);
                         parse_http(http_req, line_req);
 
@@ -445,8 +461,6 @@ void start_multiplexing_io(void){
                         }
 
                         if (--ready <= 0) break;
-
-                    }while (line_req[3] && !strncmp(line_req[3], "keep-alive", 10) && errRead==0);
                 }
             }
         }
@@ -480,7 +494,7 @@ void map_html_error(char *HTML[3]) {
     if (!mm1 || !mm2)
         error_found("Error in malloc\n");
     memset(mm1, (int) '\0', len); memset(mm2, (int) '\0', len);
-    sprintf(mm1, s, "404 Not Fod", "404 Not Fod", "The requested URL was not fod on this server.");
+    sprintf(mm1, s, "404 Not Found", "404 Not Found", "The requested URL was not found on this server.");
     sprintf(mm2, s, "400 Bad Request", "Bad Request", "Your browser sent a request that this server could not derstand.");
     HTML[1] = mm1;
     HTML[2] = mm2;
@@ -919,22 +933,31 @@ ssize_t send_http_msg(int sd, char *s, ssize_t dim) {
             switch (errno) {
                 case EINTR:
                     perror("errore send(EINTR)");
+                    break;
                 case EAGAIN:
                     perror("errore send(EAGAIN)");
+                    break;
                 case EBADF:
                     perror("errore send(EBADF)");
+                    break;
                 case ECONNREFUSED:
                     perror("errore send(ECONNREFUSED)");
+                    break;
                 case EFAULT:
                     perror("errore send(EFAULT)");
+                    break;
                 case EINVAL:
                     perror("errore send(EINVAL)");
+                    break;
                 case ENOMEM:
                     perror("errore send(ENOMEM)");
+                    break;
                 case ENOTCONN:
                     perror("errore send(ENOTCONN)");
+                    break;
                 case ENOTSOCK:
                     perror("errore send(ENOTSOCK)");
+                    break;
 
                 default:
                     perror("errore send");
@@ -1425,6 +1448,7 @@ int data_to_send(int sock, char **line) {
                     memcpy(h, img_to_send, (size_t) dim);
                     dim_tot += dim;
                 }
+                printf("%zi\n", dim_tot);
                 if (send_http_msg(sock, http_rep, dim_tot) == -1) {
                     fprintf(stderr, "data_to_send: Error while sending data to client(good request)\n");
                     free_time_http(t, http_rep);
