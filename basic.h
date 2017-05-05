@@ -16,15 +16,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/select.h>
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
-
 #include <dirent.h>
 #include <signal.h>
 

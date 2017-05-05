@@ -78,12 +78,14 @@ struct image {
 
 struct image *img;
 
+void free_mem();
+
 /*prints on stderr and updates LOG file when an error occours */
 void error_found(char *s) {
     fprintf(stderr, "%s", s);
     strcpy(s,"failure");
 
-    //free_mem();
+    free_mem();
 
     exit(EXIT_FAILURE);
 }
@@ -110,6 +112,55 @@ void write_fstream(char *s, FILE *file) {
     fprintf(file,"%s\n",s);
     fseek(file, sizeof(s),SEEK_CUR);
     strcpy(s,"NN");
+}
+
+
+// Used to remove file from file system
+void remove_file(char *path) {
+    if (unlink(path)) {
+        errno = 0;
+        switch (errno) {
+            case EBUSY:
+                error_found("File can not be linked: It is being use by the system\n");
+
+            case EIO:
+                error_found("File can not be linked: An I/O error occurred\n");
+
+            case ENAMETOOLONG:
+                error_found("File can not be linked: Pathname was too long\n");
+
+            case ENOMEM:
+                error_found("File can not be linked: Insufficient kernel memory was available\n");
+
+            case EPERM:
+                error_found("File can not be linked: The file system does not allow linking of files\n");
+
+            case EROFS:
+                error_found("File can not be linked: Pathname refers to a file on a read-only file system\n");
+
+            default:
+                error_found("File can not be linked: Error in link\n");
+        }
+    }
+}
+
+
+// Used to free memory allocated from malloc/realloc funcitions
+void free_mem() {
+    free(HTML[0]);
+    free(HTML[1]);
+    free(HTML[2]);
+    if (CACHE_N >= 0 && cache_hit_head && cache_hit_tail) {
+        struct cache_hit *to_be_removed;
+        while (cache_hit_tail) {
+            to_be_removed = cache_hit_tail;
+            cache_hit_tail = cache_hit_tail->next_hit;
+            free(to_be_removed);
+        }
+    }
+
+    remove_file(tmp_resized);
+    remove_file(tmp_cache);
 }
 
 //open file and check permissions
@@ -183,7 +234,7 @@ void check_stdin(void) {
             if (fclose(LOG) != 0)
                 error_found("Error in fclose\n");
 
-            //free_mem();
+            free_mem();
 
             exit(EXIT_SUCCESS);
         }
@@ -785,35 +836,6 @@ void init(int argc, char **argv){
 }
 
 
-
-// Used to remove file from file system
-void remove_file(char *path) {
-    if (unlink(path)) {
-        errno = 0;
-        switch (errno) {
-            case EBUSY:
-                error_found("File can not be linked: It is being use by the system\n");
-
-            case EIO:
-                error_found("File can not be linked: An I/O error occurred\n");
-
-            case ENAMETOOLONG:
-                error_found("File can not be linked: Pathname was too long\n");
-
-            case ENOMEM:
-                error_found("File can not be linked: Insufficient kernel memory was available\n");
-
-            case EPERM:
-                error_found("File can not be linked: The file system does not allow linking of files\n");
-
-            case EROFS:
-                error_found("File can not be linked: Pathname refers to a file on a read-only file system\n");
-
-            default:
-                error_found("File can not be linked: Error in link\n");
-        }
-    }
-}
 
 int quality(char *h_accept) {
     double images, others, q;
@@ -1448,7 +1470,6 @@ int data_to_send(int sock, char **line) {
                     memcpy(h, img_to_send, (size_t) dim);
                     dim_tot += dim;
                 }
-                printf("%zi\n", dim_tot);
                 if (send_http_msg(sock, http_rep, dim_tot) == -1) {
                     fprintf(stderr, "data_to_send: Error while sending data to client(good request)\n");
                     free_time_http(t, http_rep);
