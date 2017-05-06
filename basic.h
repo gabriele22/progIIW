@@ -25,7 +25,7 @@
 #include <signal.h>
 
 
-#define MAXLINE		1024
+#define MAXLINE	1024
 #define DIM 512
 #define DIM2 64
 
