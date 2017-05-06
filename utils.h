@@ -10,7 +10,6 @@ extern int maxi, maxd;
 extern fd_set		rset, allset;
 extern int client[FD_SETSIZE];
 
-extern char esito[MAXLINE];
 
 extern FILE *LOG;
 extern char *HTML[3];
@@ -27,7 +26,6 @@ extern char *user_command;
 extern struct image *img;
 
 void error_found(char *s);
-void add_time(char *text);
 void write_fstream(char *s, FILE *file);
 FILE *open_file(const char *path);
 void check_and_build(char *s, char **html, size_t *dim);
@@ -45,7 +43,7 @@ void check_stdin(void);
 void remove_file(char *path);
 int quality(char *h_accept);
 char *get_img(char *name, size_t img_dim, char *directory);
-int data_to_send(int sock, char **line);
+int data_to_send(int sock, char **line, char *log_string);
 void parse_http(char *s, char **d);
 char *get_time(void);
 ssize_t send_http_msg(int sd, char *s, ssize_t dim);

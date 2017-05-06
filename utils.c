@@ -15,9 +15,6 @@ fd_set		rset, allset;
 //array that keep trace of the active connections
 int client[FD_SETSIZE];
 
-//string that reports the result of the operations
-char esito[MAXLINE];
-//-------------------
 // Log's file pointer
 FILE *LOG = NULL;
 // Pointer to html files; 1st: root, 2nd: 404, 3rd 400.
@@ -79,11 +76,37 @@ struct image {
 struct image *img;
 
 void free_mem();
+// Used to get current time
+
+char *get_time(void) {
+    time_t now = time(NULL);
+    char *k = malloc(sizeof(char) * DIM2);
+    if (!k) {
+        perror("error malloc");
+        exit(1);
+    }
+    memset(k, (int) '\0', sizeof(char) * DIM2);
+    strcpy(k, ctime(&now));
+    if (k[strlen(k) - 1] == '\n')
+        k[strlen(k) - 1] = '\0';
+    return k;
+}
+
+void write_fstream(char *s, FILE *file) {
+    fprintf(file,"%s\n\n",s);
+    fseek(file, sizeof(s),SEEK_CUR);
+    memset(s,(int)'\0',MAXLINE);
+}
 
 /*prints on stderr and updates LOG file when an error occours */
 void error_found(char *s) {
     fprintf(stderr, "%s", s);
-    strcpy(s,"failure");
+    char *t =get_time();
+    strcat(s,t);
+    char fail[MAXLINE*2];
+    sprintf(fail,"failure: %s",s);
+
+    write_fstream(fail,LOG);
 
     free_mem();
 
@@ -94,26 +117,71 @@ void usage(const char *p) {
     fprintf(stderr, usage_str, p);
     exit(EXIT_SUCCESS);
 }
-//Adds date and time to a string
-void add_time(char *text){
-    time_t	ticks;
-    char buff[MAXLINE];
 
-    ticks = time(NULL); /* legge l'orario usando la chiamata di sistema time */
-    /* scrive in buff l'orario nel formato ottenuto da ctime
-    snprintf impedisce l'overflow del buffer */
-    snprintf(buff, sizeof(buff), "\n%s", ctime(&ticks));
-    strcat(text, buff);
-    return;
+
+
+
+int remove_directory(const char *path)
+{
+    DIR *d = opendir(path);
+    size_t path_len = strlen(path);
+    int r = -1;
+
+    if (d)
+    {
+        struct dirent *p;
+
+        r = 0;
+
+        while (!r && (p=readdir(d)))
+        {
+            int r2 = -1;
+            char *buf;
+            size_t len;
+
+            /* Skip the names "." and ".." as we don't want to recurse on them. */
+            if (!strcmp(p->d_name, ".") || !strcmp(p->d_name, ".."))
+            {
+                continue;
+            }
+
+            len = path_len + strlen(p->d_name) + 2;
+            buf = malloc(len);
+
+            if (buf)
+            {
+                struct stat statbuf;
+
+                snprintf(buf, len, "%s/%s", path, p->d_name);
+
+                if (!stat(buf, &statbuf))
+                {
+                    if (S_ISDIR(statbuf.st_mode))
+                    {
+                        r2 = remove_directory(buf);
+                    }
+                    else
+                    {
+                        r2 = unlink(buf);
+                    }
+                }
+
+                free(buf);
+            }
+
+            r = r2;
+        }
+
+        closedir(d);
+    }
+
+    if (!r)
+    {
+        r = rmdir(path);
+    }
+
+    return r;
 }
-
-void write_fstream(char *s, FILE *file) {
-    add_time(s);
-    fprintf(file,"%s\n",s);
-    fseek(file, sizeof(s),SEEK_CUR);
-    strcpy(s,"NN");
-}
-
 
 // Used to remove file from file system
 void remove_file(char *path) {
@@ -137,6 +205,12 @@ void remove_file(char *path) {
 
             case EROFS:
                 error_found("File can not be linked: Pathname refers to a file on a read-only file system\n");
+            case EACCES:
+                error_found("EACCES");
+            case ENOTEMPTY:
+                error_found("ENOTEMPY");
+            case EEXIST:
+                error_found("EEXIST");
 
             default:
                 error_found("File can not be linked: Error in link\n");
@@ -158,9 +232,8 @@ void free_mem() {
             free(to_be_removed);
         }
     }
-
-    remove_file(tmp_resized);
-    remove_file(tmp_cache);
+    remove_directory(tmp_resized);
+    remove_directory(tmp_cache);
 }
 
 //open file and check permissions
@@ -227,7 +300,13 @@ void check_stdin(void) {
                 error_found("Error in close\n");
             }
 
-            strcpy(esito,"\t\tServer closed.\n\n\n");
+            char textClose[MAXLINE];
+            char *t= get_time();
+
+            sprintf(textClose,"%s%s%s","-------------SERVER CLOSED[",t,"]-----------------");
+
+            write_fstream(textClose,LOG);
+            fflush(LOG);
 
             errno = 0;
 
@@ -295,7 +374,7 @@ void listen_connections(void) {
 
 }
 
-int data_to_send(int sock, char **line);
+int data_to_send(int sock, char **line, char *log_string);
 void parse_http(char *s, char **d);
 
 void start_multiplexing_io(void){
@@ -387,8 +466,7 @@ void start_multiplexing_io(void){
             /* Se non ci sono posti liberi in client, errore */
             if (i == FD_SETSIZE) {
                 fprintf(stderr, "errore in accept, non ci sono posti liberi\n");
-                strcpy(esito,"failure, exceeded maximum number of supported connections");
-                exit(1);
+                error_found("exceeded maximum number of supported connections");
             }
             /* Altrimenti inserisce connsd tra i descrittori da controllare
                ed aggiorna maxd */
@@ -484,30 +562,25 @@ void start_multiplexing_io(void){
                 if ((n == 0 )) {
                     // Se legge EOF, chiude il descrittore di connessione
                     if (close(socksd) == -1) {
-                        perror("errore in close");
-                        strcpy(esito,"failure");
-                        //exit(1);
+                        perror("error in close");
+                        error_found("error in close");
+
                     }
                     // Rimuove socksd dalla lista dei socket da controllare
                     FD_CLR(socksd, &allset);
                     // Cancella socksd da client
                     client[i] = -1;
-                    memset((void *)&esito, 0,sizeof(esito));
 
                 }else {
-
-                        //printf("\n\n%s\n\n", http_req);
                         parse_http(http_req, line_req);
 
-                        //printf("\n\n%s\n\n", line_req[3]);
 
-                        char log_string[DIM / 2];
-                        memset(log_string, (int) '\0', DIM / 2);
-                        sprintf(log_string, "\tClient:\t%s\tRequest: '%s %s %s'\n",
-                                inet_ntoa(cliaddr.sin_addr), line_req[0], line_req[1], line_req[2]);
-                        //write_fstream(log_string, LOG);
-                        if(data_to_send(socksd, line_req)){
-                            strcpy(esito,log_string);
+                        char log_string[DIM ];
+                        memset(log_string, (int) '\0', DIM);
+                        sprintf(log_string, "\t%s [%s] '%s %s %s'",
+                                inet_ntoa(cliaddr.sin_addr),get_time(), line_req[0], line_req[1], line_req[2]);
+                        if(data_to_send(socksd, line_req, log_string) == 0){
+                            write_fstream(log_string,LOG);
                             break;
                         }
 
@@ -516,16 +589,6 @@ void start_multiplexing_io(void){
             }
         }
 
-
-//----------------SCRITTURA LOG--------------------------------------
-        if(strcmp(esito, "NN")==0 ){
-            continue;
-
-        }else{
-            write_fstream(esito,LOG);
-
-        }
-//---------------------------------------------------------
 
 
     }
@@ -537,7 +600,8 @@ void start_multiplexing_io(void){
 // Used to map in memory HTML files which respond with
 //  error 400 or error 404
 void map_html_error(char *HTML[3]) {
-    char *s = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\"><html><head><title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>\0";
+    char *s = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\"><html><head>\t<link rel=\"shortcut icon\" href=\"/favicon.ico\">\n"
+            " <title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>\0";
     size_t len = strlen(s) + 2 * DIM2 * sizeof(char);
 
     char *mm1 = malloc(len);
@@ -813,12 +877,10 @@ void check_images(int perc) {
 void init(int argc, char **argv){
 
     LOG= open_file("LOG");
-    strcpy(esito,"NN");
 
     char IMAGES_PATH[DIM];
     memset(IMAGES_PATH, (int) '\0', DIM);
     strcpy(IMAGES_PATH, ".");
-
     int perc = 20;
 
     get_opt(argc, argv, IMAGES_PATH,&perc);
@@ -1002,23 +1064,11 @@ void free_time_http(char *time, char *http) {
     free(time);
     free(http);
 }
-char *get_time(void) {
-    time_t now = time(NULL);
-    char *k = malloc(sizeof(char) * DIM2);
-    if (!k)
-        error_found("Error in malloc\n");
-    memset(k, (int) '\0', sizeof(char) * DIM2);
-    strcpy(k, ctime(&now));
-    if (!k)
-        error_found("Error in ctime\n");
-    if (k[strlen(k) - 1] == '\n')
-        k[strlen(k) - 1] = '\0';
-    return k;
-}
+
 
 
 // Find and send resource for client
-int data_to_send(int sock, char **line) {
+int data_to_send(int sock, char **line, char *log_string) {
     char *http_rep = malloc(DIM * DIM * 2 * sizeof(char));
     if (!http_rep)
         error_found("Error in malloc\n");
@@ -1040,11 +1090,13 @@ int data_to_send(int sock, char **line) {
         h += strlen(http_rep);
         memcpy(h, HTML[2], strlen(HTML[2]));
 
+        strcat(log_string,"400 Bad Request");
         if (send_http_msg(sock, http_rep, strlen(http_rep)) == -1) {
             fprintf(stderr, "Error while sending data to client(400 bad request)\n");
             free_time_http(t, http_rep);
             return -1;
         }
+
         return 0;
     }
     // build the reply in case of method HEAD request
@@ -1055,7 +1107,7 @@ int data_to_send(int sock, char **line) {
             h += strlen(http_rep);
             memcpy(h, HTML[0], strlen(HTML[0]));
         }
-
+        strcat(log_string,"200 OK");
         if (send_http_msg(sock, http_rep, strlen(http_rep)) == -1) {
             fprintf(stderr, "Error while sending data to client\n");
             free_time_http(t, http_rep);
@@ -1489,13 +1541,13 @@ int data_to_send(int sock, char **line) {
                 h += strlen(http_rep);
                 memcpy(h, HTML[1], strlen(HTML[1]));
             }
+            strcat(log_string,"404 Not Found");
             if (send_http_msg(sock, http_rep, strlen(http_rep)) == -1) {
                 fprintf(stderr, "Error while sending data to client(404 not found)\n");
                 free_time_http(t, http_rep);
                 return -1;
             }
-        }
-
+        }else strcat(log_string,"200 OK");
     }
 
     free_time_http(t, http_rep);
