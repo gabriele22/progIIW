@@ -22,15 +22,15 @@ FILE *LOG = NULL;
 // Pointer to html files; 1st: root, 2nd: 404, 3rd 400.
 char *HTML[3];
 // Port's number
-int PORT = 11502;
+int port = 11502;
 //MAximum number of active connections
-int MAXCONN = 1000;
+int BACKLOG = 1000;
 // Listening socket
-int LISTENsd;
+int listensd;
 // Number of cached images
 volatile int CACHE_N;
 // Path of images to share
-char IMG_PATH[DIM / 2];
+char src_path[DIM / 2];
 // tmp files
 char tmp_resized[DIM2] = "/tmp/RESIZED.XXXXXX";
 // tmp files cached
@@ -39,8 +39,8 @@ char tmp_cache[DIM2] = "/tmp/CACHE.XXXXXX";
 char *usage_str = "Usage: %s\n"
         "\t\t\t[-p port]\n"
         "\t\t\t[-i image's path]\n"
-        "\t\t\t[-r percentage to resize HTML images]\n"
-        "\t\t\t[-n cache size (number of images)]\n"
+        "\t\t\t[-r percentage of resized images in  homepage]\n"
+        "\t\t\t[-n number of cached images]\n"
         "\t\t\t[-h help]\n";
 // User's command
 char *user_command = "-Enter 'q'/'Q' to close the server, "
@@ -279,7 +279,7 @@ void check_stdin(void) {
 
             errno = 0;
             // Kernel may still hold some resources for a period (TIME_WAIT)
-            if (close(LISTENsd) != 0) {
+            if (close(listensd) != 0) {
                 if (errno == EIO)
                     error_found("I/O error occurred\n");
                 error_found("Error in close\n");
@@ -347,7 +347,7 @@ void get_info(struct stat *buf, char *path, int check) {
     }
 }
 
-// Used to analyze user's options
+// Analyze arguments passed from command line
 void get_opt(int argc, char **argv, char *path, int *perc) {
     int i;
     for (i = 1; argv[i] != NULL; ++i)
@@ -356,11 +356,10 @@ void get_opt(int argc, char **argv, char *path, int *perc) {
 
     int c; char *e;
     struct stat statbuf;
-    // Parsing the command line arguments
-    // -p := port number;
-    // -i := directory of files to send;
-    // -r := percentage of resized images which belong to HTML file;
-    // -n := size of cache;
+    // -p --> port number;
+    // -i --> source path for images to be resized;
+    // -r --> percentage of resized images in  homepage;
+    // -n --> size of cache;
     while ((c = getopt(argc, argv, "p:i:c:r:n:")) != -1) {
         switch (c) {
             case 'p':
@@ -373,7 +372,7 @@ void get_opt(int argc, char **argv, char *path, int *perc) {
                     error_found("Argument -p: Error in strtol: Invalid number port\n");
                 if (p_arg > 65535)
                     error_found("Argument -p: Port's number too high\n");
-                PORT = p_arg;
+                port = p_arg;
                 break;
 
 
@@ -453,7 +452,7 @@ void alloc_r_img(struct image **h, char *path) {
     char *name = strrchr(path, '/');
     if (!name) {
         if (!strncmp(path, "favicon.ico", 11)) {
-            sprintf(new_path, "%s/%s", IMG_PATH, path);
+            sprintf(new_path, "%s/%s", src_path, path);
             strcpy(k->name, path);
             path = new_path;
         } else {
@@ -490,7 +489,7 @@ void check_images(int perc) {
     char *k;
 
     errno = 0;
-    dir = opendir(IMG_PATH);
+    dir = opendir(src_path);
     if (!dir) {
         if (errno == EACCES)
             error_found("Permission denied\n");
@@ -545,7 +544,7 @@ void check_images(int perc) {
 
             char command[DIM * 2];
             memset(command, (int) '\0', DIM * 2);
-            sprintf(input, "%s/%s", IMG_PATH, ent -> d_name);
+            sprintf(input, "%s/%s", src_path, ent -> d_name);
             sprintf(output, "%s/%s", tmp_resized, ent -> d_name);
             sprintf(command, convert, input, perc, output);
 
@@ -599,7 +598,7 @@ void init(int argc, char **argv){
     // Create tmp folder for resized and cached images
     if (!mkdtemp(tmp_resized) || !mkdtemp(tmp_cache))
         error_found("Error in mkdtmp\n");
-    strcpy(IMG_PATH, IMAGES_PATH);
+    strcpy(src_path, IMAGES_PATH);
 
     check_images(perc);
     //Size of cache is setted to an appropriate number
@@ -843,7 +842,7 @@ int data_to_send(int sock, char **line, char *log_string) {
                     !(favicon = strncmp(p_name, "favicon.ico", strlen("favicon.ico")))) {
                     // Looking for resized image or favicon.ico
                     if (strncmp(line[0], "HEAD", 4)) {
-                        img_to_send = get_img(p_name, i->size_r, favicon ? tmp_resized : IMG_PATH);
+                        img_to_send = get_img(p_name, i->size_r, favicon ? tmp_resized : src_path);
                         if (!img_to_send) {
                             fprintf(stderr, "data_to_send: Error in get_img\n");
                             free_time_http(t, http_rep);
@@ -907,7 +906,7 @@ int data_to_send(int sock, char **line, char *log_string) {
                             char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
-                            sprintf(command, format, IMG_PATH, p_name, q, tmp_cache, name_cached_img);
+                            sprintf(command, format, src_path, p_name, q, tmp_cache, name_cached_img);
                             if (system(command)) {
                                 fprintf(stderr, "data_to_send: Unexpected error while refactoring image\n");
                                 free_time_http(t, http_rep);
@@ -1016,7 +1015,7 @@ int data_to_send(int sock, char **line, char *log_string) {
                             char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
-                            sprintf(command, format, IMG_PATH, p_name, q, tmp_cache, name_cached_img);
+                            sprintf(command, format, src_path, p_name, q, tmp_cache, name_cached_img);
                             if (system(command)) {
                                 fprintf(stderr, "data_to_send: Unexpected error while refactoring image\n");
                                 free_time_http(t, http_rep);

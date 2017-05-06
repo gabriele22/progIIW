@@ -4,22 +4,22 @@
 void listen_connections(void) {
     struct sockaddr_in server_addr;
 
-    if ((LISTENsd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    if ((listensd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         error_found("Error in socket\n");
 
     memset((void *) &server_addr, 0, sizeof(server_addr));
     (server_addr).sin_family = AF_INET;
     // All available interface
     (server_addr).sin_addr.s_addr = htonl(INADDR_ANY);
-    (server_addr).sin_port = htons((signed short) PORT);
+    (server_addr).sin_port = htons((signed short) port);
 
     // To reuse a socket
     int flag = 1;
-    if (setsockopt(LISTENsd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
+    if (setsockopt(listensd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
         error_found("Error in setsockopt\n");
 
     errno = 0;
-    if (bind(LISTENsd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+    if (bind(listensd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
         switch (errno) {
             case EACCES:
                 error_found("Choose another socket\n");
@@ -36,7 +36,7 @@ void listen_connections(void) {
     }
 
     // listen for incoming connections
-    if (listen(LISTENsd, MAXCONN) <0)
+    if (listen(listensd, BACKLOG) <0)
         error_found("Error in listen\n");
 
     char textStart[MAXLINE];
@@ -48,7 +48,7 @@ void listen_connections(void) {
 
     int i;
     /* Initialize fds numbers */
-    maxd = LISTENsd;
+    maxd = listensd;
     maxi = -1;
     /* Initialize array  client containing used fds*/
     for (i = 0; i < FD_SETSIZE; i++)
@@ -57,7 +57,7 @@ void listen_connections(void) {
     FD_ZERO(&allset); /* Initialize to zero allset */
 
 
-    fprintf(stdout, "-Server's socket correctly created with number: %d\n", PORT);
+    fprintf(stdout, "-Server's socket correctly created with number: %d\n", port);
 
 }
 
@@ -72,7 +72,7 @@ void start_multiplexing_io(void){
     char http_req[DIM * DIM];
     char *line_req[7];
 
-    FD_SET(LISTENsd, &allset); /* Insert the listening socket into the set */
+    FD_SET(listensd, &allset); /* Insert the listening socket into the set */
 
     FD_SET(fileno(stdin), &allset); /* Insert the listening socket into the set */
 
@@ -97,9 +97,9 @@ void start_multiplexing_io(void){
 
         /* Se è arrivata a richiesta di connessione, il socket di ascolto
            è leggibile: viene invocata accept() e creato  socket di connessione */
-        if (FD_ISSET(LISTENsd, &rset)) {
+        if (FD_ISSET(listensd, &rset)) {
             len = sizeof(cliaddr);
-            connsd = accept(LISTENsd, (struct sockaddr *)&cliaddr, &len);
+            connsd = accept(listensd, (struct sockaddr *)&cliaddr, &len);
 
             if (connsd == -1) {
                 switch (errno) {
@@ -283,10 +283,14 @@ void start_multiplexing_io(void){
 
 int main(int argc, char **argv)
 {
+    //function used to initialize parameters option, create services file and directories
     init(argc,argv);
+    //to manage SIGPIPE signal
     catch_signal();
 
+    //set server in listening state
     listen_connections();
+    //the core of server based on events
     start_multiplexing_io();
 
 }

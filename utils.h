@@ -5,12 +5,12 @@
 #ifndef PROGETTOIIW_UTILS_H
 #define PROGETTOIIW_UTILS_H
 
-extern int PORT;
-extern int MAXCONN;
-extern int LISTENsd;
+extern int port;
+extern int BACKLOG;
+extern int listensd;
 extern FILE *LOG;
 extern int maxi, maxd;
-extern fd_set		rset, allset;
+extern fd_set	rset, allset;
 extern int client[FD_SETSIZE];
 extern int active;
 
