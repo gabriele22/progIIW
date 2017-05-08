@@ -484,6 +484,47 @@ void alloc_r_img(struct image **h, char *path) {
 //  in the current folder less otherwise specified by the user.
 void check_images(int perc) {
 
+//----_____------_____-------__-_______
+    DIR *dirCorr;
+    struct dirent *entCurr;
+    struct image **i = &img;
+    size_t dim = 4;
+    char *html = malloc((size_t) dim * DIM * sizeof(char));
+    if (!html)
+        error_found("Error in malloc\n");
+    memset(html, (int) '\0', (size_t) dim * DIM * sizeof(char));
+    // %s page's title; %s header; %s text.
+    char *h = "<!DOCTYPE html><html><head><meta charset=\"utf-8\" /><title>%s</title><style type=\"text/css\"></style><script type=\"text/javascript\"></script></head><body backgrod=\"\"><h1>%s</h1><br><br><h3>%s</h3><hr><br>";
+    sprintf(html, h, "ProjectIIW", "Welcome", "");
+    // %s image's path; %d resizing percentage
+    char *convert = "convert %s -resize %d%% %s;exit";
+    char input[DIM], output[DIM];
+    memset(input, (int) '\0', DIM); memset(output, (int) '\0', DIM);
+
+    errno = 0;
+    dirCorr = opendir(".");
+    if (!dirCorr) {
+        if (errno == EACCES)
+            error_found("Permission denied\n");
+        error_found("check_images: Error in opendir\n");
+    }
+    while ((entCurr = readdir(dirCorr)) != NULL) {
+        if (entCurr -> d_type == DT_REG) {
+            if (!strcmp(entCurr -> d_name, "favicon.ico")) {
+                char pathFav[DIM],pwd[DIM];
+                if (getcwd(pwd, sizeof(pwd)) == NULL)
+                    perror("error getcwd");
+                sprintf(pathFav, "%s/%s",pwd, entCurr->d_name);
+                alloc_r_img(i, pathFav);
+                i = &(*i)->next_img;
+                break;
+
+            }
+        }
+    }
+
+//----_____------_____-------__-_______
+
     DIR *dir;
     struct dirent *ent;
     char *k;
@@ -496,22 +537,11 @@ void check_images(int perc) {
         error_found("check_images: Error in opendir\n");
     }
 
-    size_t dim = 4;
-    char *html = malloc((size_t) dim * DIM * sizeof(char));
-    if (!html)
-        error_found("Error in malloc\n");
-    memset(html, (int) '\0', (size_t) dim * DIM * sizeof(char));
 
-    // %s page's title; %s header; %s text.
-    char *h = "<!DOCTYPE html><html><head><meta charset=\"utf-8\" /><title>%s</title><style type=\"text/css\"></style><script type=\"text/javascript\"></script></head><body backgrod=\"\"><h1>%s</h1><br><br><h3>%s</h3><hr><br>";
-    sprintf(html, h, "ProjectIIW", "Welcome", "");
-    // %s image's path; %d resizing percentage
-    char *convert = "convert %s -resize %d%% %s;exit";
     size_t len_h = strlen(html), new_len_h;
 
-    struct image **i = &img;
-    char input[DIM], output[DIM];
-    memset(input, (int) '\0', DIM); memset(output, (int) '\0', DIM);
+    //struct image **i = &img;
+
 
     fprintf(stdout, "-Please wait while resizing images...\n");
     while ((ent = readdir(dir)) != NULL) {
@@ -521,13 +551,6 @@ void check_images(int perc) {
                 fprintf(stderr, "File '%s' was skipped\n", ent -> d_name);
                 continue;
             }
-
-            if (!strcmp(ent -> d_name, "favicon.ico")) {
-                fprintf(stdout, "-favicon.ico was setted\n");
-                alloc_r_img(i, ent -> d_name);
-                i = &(*i) -> next_img;
-                continue;
-            } else {
                 if ((k = strrchr(ent -> d_name, '.'))) {
                     if (strcmp(k, ".db") == 0) {
                         fprintf(stderr, "File '%s' was skipped\n", ent -> d_name);
@@ -540,7 +563,6 @@ void check_images(int perc) {
                 } else {
                     fprintf(stderr, "Warning: file '%s' may have an supported format\n", ent -> d_name);
                 }
-            }
 
             char command[DIM * 2];
             memset(command, (int) '\0', DIM * 2);
@@ -842,7 +864,7 @@ int data_to_send(int sock, char **line, char *log_string) {
                     !(favicon = strncmp(p_name, "favicon.ico", strlen("favicon.ico")))) {
                     // Looking for resized image or favicon.ico
                     if (strncmp(line[0], "HEAD", 4)) {
-                        img_to_send = get_img(p_name, i->size_r, favicon ? tmp_resized : src_path);
+                        img_to_send = get_img(p_name, i->size_r, favicon ? tmp_resized : ".");
                         if (!img_to_send) {
                             fprintf(stderr, "data_to_send: Error in get_img\n");
                             free_time_http(t, http_rep);

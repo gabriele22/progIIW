@@ -74,7 +74,7 @@ void start_multiplexing_io(void){
 
     FD_SET(listensd, &allset); /* Insert the listening socket into the set */
 
-    FD_SET(fileno(stdin), &allset); /* Insert the listening socket into the set */
+    FD_SET(fileno(stdin), &allset); /* Insert stdin into the set */
 
 
     for ( ; ; ) {
@@ -261,7 +261,7 @@ void start_multiplexing_io(void){
 
                     char log_string[DIM ];
                     memset(log_string, (int) '\0', DIM);
-                    sprintf(log_string, "\t%s [%s] '%s %s %s'",
+                    sprintf(log_string, "\t%s [%s] '%s %s %s' ",
                             inet_ntoa(cliaddr.sin_addr),get_time(), line_req[0], line_req[1], line_req[2]);
                     if(data_to_send(socksd, line_req, log_string) == 0){
                         write_fstream(log_string,LOG);

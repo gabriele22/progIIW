@@ -15,7 +15,6 @@ extern int client[FD_SETSIZE];
 extern int active;
 
 
-
 void check_stdin(void);
 void error_found(char *s);
 char *get_time(void);
