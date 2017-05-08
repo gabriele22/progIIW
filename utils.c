@@ -106,7 +106,7 @@ void error_found(char *s) {
     char *t =get_time();
     strcat(s,t);
     char fail[MAXLINE*2];
-    sprintf(fail,"failure: %s",s);
+    sprintf(fail,"FAILURE--> %s",s);
 
     write_fstream(fail,LOG);
 
@@ -416,9 +416,9 @@ void get_opt(int argc, char **argv, char *path, int *perc) {
     }
 }
 
-// Used to dynamically fill the HTML file just created
-void check_and_build(char *s, char **html, size_t *dim) {
-    char *k = "<b>%s</b><br><br><a href=\"%s\"><img src=\"%s/%s\" height=\"130\" weight=\"100\"></a><br><br><br><br>";
+// Used to build the HTML file with images tags
+void add_img_tag(char *s, char **html, size_t *dim) {
+    char *k = "<div align=\"center\"><b>IMAGE NAME: </b><p style=\"color:#0066FF; display:inline;\">%s</p><br><br><a href=\"%s\"><img src=\"%s/%s\" height=\"530\" weight=\"530\"></a><br><br><br><br></div>";
 
     size_t len = strlen(*html);
     if (len + DIM >= *dim * DIM) {
@@ -477,14 +477,11 @@ void alloc_r_img(struct image **h, char *path) {
     }
 }
 
-/*
- * NOTE: "imagemagick" package required
- * */
-// Used to build the dynamic structure and fill it with the images
-//  in the current folder less otherwise specified by the user.
-void check_images(int perc) {
+//ATTENTION: "imagemagick" package needed
+// Used to build the dynamic list of images searching for them
+//  in the current folder (favicon.ico) and in the folder specified by the user.
+void bulid_images_list(int perc) {
 
-//----_____------_____-------__-_______
     DIR *dirCorr;
     struct dirent *entCurr;
     struct image **i = &img;
@@ -494,8 +491,8 @@ void check_images(int perc) {
         error_found("Error in malloc\n");
     memset(html, (int) '\0', (size_t) dim * DIM * sizeof(char));
     // %s page's title; %s header; %s text.
-    char *h = "<!DOCTYPE html><html><head><meta charset=\"utf-8\" /><title>%s</title><style type=\"text/css\"></style><script type=\"text/javascript\"></script></head><body backgrod=\"\"><h1>%s</h1><br><br><h3>%s</h3><hr><br>";
-    sprintf(html, h, "ProjectIIW", "Welcome", "");
+    char *h = "<!DOCTYPE html><html><head><meta charset=\"utf-8\" /><title>%s</title><style type=\"text/css\"></style><script type=\"text/javascript\"></script></head><body style=\"background-color:#DDDDDD\" ><h1 align=\"center\">%s</h1><br><br><h3 align=\"center\">%s</h3><br>";
+    sprintf(html, h, "ProjectIIW", "ProjectIIW HOMEPAGE", "--->CLICK on a image to resize it<---");
     // %s image's path; %d resizing percentage
     char *convert = "convert %s -resize %d%% %s;exit";
     char input[DIM], output[DIM];
@@ -506,14 +503,14 @@ void check_images(int perc) {
     if (!dirCorr) {
         if (errno == EACCES)
             error_found("Permission denied\n");
-        error_found("check_images: Error in opendir\n");
+        error_found("bulid_images_list: Impossible to open current directory\n");
     }
     while ((entCurr = readdir(dirCorr)) != NULL) {
         if (entCurr -> d_type == DT_REG) {
             if (!strcmp(entCurr -> d_name, "favicon.ico")) {
                 char pathFav[DIM],pwd[DIM];
                 if (getcwd(pwd, sizeof(pwd)) == NULL)
-                    perror("error getcwd");
+                    perror("bulid_images_list: not able to get current directory path");
                 sprintf(pathFav, "%s/%s",pwd, entCurr->d_name);
                 alloc_r_img(i, pathFav);
                 i = &(*i)->next_img;
@@ -523,8 +520,6 @@ void check_images(int perc) {
         }
     }
 
-//----_____------_____-------__-_______
-
     DIR *dir;
     struct dirent *ent;
     char *k;
@@ -533,17 +528,13 @@ void check_images(int perc) {
     dir = opendir(src_path);
     if (!dir) {
         if (errno == EACCES)
-            error_found("Permission denied\n");
-        error_found("check_images: Error in opendir\n");
+            error_found("bulid_images_list: Permission denied\n");
+        error_found("bulid_images_list: Impossible to open images directory\n");
     }
-
 
     size_t len_h = strlen(html), new_len_h;
 
-    //struct image **i = &img;
-
-
-    fprintf(stdout, "-Please wait while resizing images...\n");
+    fprintf(stdout, "Doing initialization operations on images, please wait\n");
     while ((ent = readdir(dir)) != NULL) {
         ++number_of_img;
         if (ent -> d_type == DT_REG) {
@@ -552,10 +543,6 @@ void check_images(int perc) {
                 continue;
             }
                 if ((k = strrchr(ent -> d_name, '.'))) {
-                    if (strcmp(k, ".db") == 0) {
-                        fprintf(stderr, "File '%s' was skipped\n", ent -> d_name);
-                        continue;
-                    }
                     if (strcmp(k, ".gif") != 0 && strcmp(k, ".GIF") != 0 &&
                         strcmp(k, ".jpg") != 0 && strcmp(k, ".JPG") != 0 &&
                         strcmp(k, ".png") != 0 && strcmp(k, ".PNG") != 0)
@@ -569,29 +556,26 @@ void check_images(int perc) {
             sprintf(input, "%s/%s", src_path, ent -> d_name);
             sprintf(output, "%s/%s", tmp_resized, ent -> d_name);
             sprintf(command, convert, input, perc, output);
-
-            /**
-             * NOTE: "imagemagick" package required
-            **/
+            //operation made by imagemagick
             if (system(command))
-                error_found("check_image: Error resizing images\n");
+                error_found("bulid_images_list: Error imagemagick not able to resize\n");
 
             alloc_r_img(i, output);
             i = &(*i) -> next_img;
-            check_and_build(ent -> d_name, &html, &dim);
+            add_img_tag(ent->d_name, &html, &dim);
         }
     }
 
     new_len_h = strlen(html);
     if (len_h == new_len_h)
-        error_found("There are no images in the specified directory\n");
+        error_found("bulid_images_list: There aren't images in the chosen directory\n");
 
     h = "</body></html>";
     if (new_len_h + DIM2 / 4 > dim * DIM) {
         ++dim;
         html = realloc(html, (size_t) dim * DIM);
         if (!html)
-            error_found("Checking images: Error in realloc\n");
+            error_found("bulid_images_list: Error in realloc\n");
         memset(html + new_len_h, (int) '\0', (size_t) dim * DIM - new_len_h);
     }
     k = html;
@@ -601,9 +585,9 @@ void check_images(int perc) {
     HTML[0] = html;
 
     if (closedir(dir))
-        error_found("Error in closedir\n");
+        error_found("bulid_images_list: Error in closedir\n");
 
-    fprintf(stdout, "-Images correctly resized in: '%s' with percentage: %d%%\n", tmp_resized, perc);
+    fprintf(stdout, "Images resized with default quality settings in: '%s' \n", tmp_resized);
 }
 
 void init(int argc, char **argv){
@@ -613,7 +597,7 @@ void init(int argc, char **argv){
     char IMAGES_PATH[DIM];
     memset(IMAGES_PATH, (int) '\0', DIM);
     strcpy(IMAGES_PATH, ".");
-    int perc = 20;
+    int perc = 50;
 
     get_opt(argc, argv, IMAGES_PATH,&perc);
 
@@ -622,7 +606,7 @@ void init(int argc, char **argv){
         error_found("Error in mkdtmp\n");
     strcpy(src_path, IMAGES_PATH);
 
-    check_images(perc);
+    bulid_images_list(perc);
     //Size of cache is setted to an appropriate number
     if(number_of_img!=0)
         CACHE_N=((number_of_img-2)*30);
