@@ -4,8 +4,9 @@
 
 
 struct cache_hit *cache_hit_tail, *cache_hit_head;
+//number of active requests
 int active=0;
-//------------------
+
 //indexes to manage select() file descriptors
 int maxi, maxd;
 
@@ -36,15 +37,15 @@ char tmp_resized[DIM2] = "/tmp/RESIZED.XXXXXX";
 // tmp files cached
 char tmp_cache[DIM2] = "/tmp/CACHE.XXXXXX";
 // Usage string
-char *usage_str = "Usage: %s\n"
+char *usage_str = "USAGE: %s\n"
         "\t\t\t[-p port]\n"
         "\t\t\t[-i image's path]\n"
         "\t\t\t[-r percentage of resized images in  homepage]\n"
         "\t\t\t[-n number of cached images]\n"
         "\t\t\t[-h help]\n";
 // User's command
-char *user_command = "-Enter 'q'/'Q' to close the server, "
-        "'s'/'S' to know server's state or ";
+char *user_command = "ENTER 'q'/'Q' to close the server, "
+        "'s'/'S' to know server's state ";
 
 
 // Struct which contains cache's state
@@ -77,9 +78,8 @@ struct image {
 
 struct image *img;
 
-void free_mem();
+void clean_resources();
 // Used to get current time
-
 char *get_time(void) {
     time_t now = time(NULL);
     char *k = malloc(sizeof(char) * DIM2);
@@ -93,7 +93,7 @@ char *get_time(void) {
         k[strlen(k) - 1] = '\0';
     return k;
 }
-
+//writes on stdout and on file
 void write_fstream(char *s, FILE *file) {
     fprintf(file,"%s\n\n",s);
     fseek(file, sizeof(s),SEEK_CUR);
@@ -110,52 +110,38 @@ void error_found(char *s) {
 
     write_fstream(fail,LOG);
 
-    free_mem();
+    clean_resources();
 
     exit(EXIT_FAILURE);
 }
 
-void usage(const char *p) {
-    fprintf(stderr, usage_str, p);
-    exit(EXIT_SUCCESS);
-}
 
-
-
-
+//removes directory and its content
 int remove_directory(const char *path)
 {
     DIR *d = opendir(path);
     size_t path_len = strlen(path);
     int r = -1;
-
     if (d)
     {
         struct dirent *p;
-
         r = 0;
-
         while (!r && (p=readdir(d)))
         {
             int r2 = -1;
             char *buf;
             size_t len;
-
             /* Skip the names "." and ".." as we don't want to recurse on them. */
             if (!strcmp(p->d_name, ".") || !strcmp(p->d_name, ".."))
             {
                 continue;
             }
-
             len = path_len + strlen(p->d_name) + 2;
             buf = malloc(len);
-
             if (buf)
             {
                 struct stat statbuf;
-
                 snprintf(buf, len, "%s/%s", path, p->d_name);
-
                 if (!stat(buf, &statbuf))
                 {
                     if (S_ISDIR(statbuf.st_mode))
@@ -167,21 +153,16 @@ int remove_directory(const char *path)
                         r2 = unlink(buf);
                     }
                 }
-
                 free(buf);
             }
-
             r = r2;
         }
-
         closedir(d);
     }
-
     if (!r)
     {
         r = rmdir(path);
     }
-
     return r;
 }
 
@@ -221,8 +202,8 @@ void remove_file(char *path) {
 }
 
 
-// Used to free memory allocated from malloc/realloc funcitions
-void free_mem() {
+// Deallocates memory and remove utility folders
+void clean_resources() {
     free(HTML[0]);
     free(HTML[1]);
     free(HTML[2]);
@@ -251,25 +232,23 @@ FILE *open_file(const char *path) {
     return f;
 }
 
-// Used to block SIGPIPE sent from send fction
+// Ignore SIGPIPE sent from send function
 void catch_signal(void) {
     struct sigaction sa;
 
     sigemptyset(&sa.sa_mask);
     sa.sa_handler = SIG_IGN;
     if (sigaction(SIGPIPE, &sa, NULL) == -1)
-        error_found("Error in sigaction\n");
+        error_found("catch_signal: Error in sigaction\n");
 }
-// Thread which control stdin to recognize user's input
+//Manages user's input
 void check_stdin(void) {
-
-    printf("\n%s\n", user_command);
     char cmd[2];
     memset(cmd, (int) '\0', 2);
     if (fscanf(stdin, "%s", cmd) != 1)
-        error_found("Error in fscanf\n");
+        error_found("check_stdin: Error in fscanf\n");
 
-    if (strlen(cmd) != 1) {
+    if (strlen(cmd) != 1 ) {
         printf("%s\n", user_command);
     } else {
         if (cmd[0] == 's' || cmd[0] == 'S') {
@@ -282,26 +261,24 @@ void check_stdin(void) {
             if (close(listensd) != 0) {
                 if (errno == EIO)
                     error_found("I/O error occurred\n");
-                error_found("Error in close\n");
+                error_found("check_stdin: Error in close\n");
             }
 
             char textClose[MAXLINE];
             char *t = get_time();
 
             sprintf(textClose, "%s%s%s", "-------------SERVER CLOSED[", t, "]-----------------");
-
             write_fstream(textClose, LOG);
             fflush(LOG);
 
             errno = 0;
-
             if (fclose(LOG) != 0)
-                error_found("Error in fclose\n");
+                error_found("check_stdin: Error in fclose\n");
 
-            free_mem();
-
+            clean_resources();
             exit(EXIT_SUCCESS);
         }
+        else printf("\n%s\n", user_command);
     }
 }
 
@@ -348,9 +325,10 @@ void fill_struct_stat(struct stat *buf, char *path, int check) {
 void get_opt(int argc, char **argv, char *path, int *perc) {
     int i;
     for (i = 1; argv[i] != NULL; ++i)
-        if (strcmp(argv[i], "-h") == 0)
-            usage(argv[0]);
-
+        if (strcmp(argv[i], "-h") == 0) {
+            fprintf(stderr, usage_str, argv[0]);
+            exit(EXIT_SUCCESS);
+        }
     int c; char *e;
     struct stat statbuf;
     // -p --> port number;
@@ -525,8 +503,8 @@ void bulid_images_list(int perc) {
 
     fprintf(stdout, "Doing initialization operations on images, please wait\n");
     while ((ent = readdir(dir)) != NULL) {
-        ++number_of_img;
         if (ent -> d_type == DT_REG) {
+            ++number_of_img;
             if (strrchr(ent -> d_name, '~')) {
                 fprintf(stderr, "File '%s' was skipped\n", ent -> d_name);
                 continue;
@@ -535,9 +513,9 @@ void bulid_images_list(int perc) {
                     if (strcmp(k, ".gif") != 0 && strcmp(k, ".GIF") != 0 &&
                         strcmp(k, ".jpg") != 0 && strcmp(k, ".JPG") != 0 &&
                         strcmp(k, ".png") != 0 && strcmp(k, ".PNG") != 0)
-                        fprintf(stderr, "Warning: file '%s' may have an supported format\n", ent -> d_name);
+                        fprintf(stderr, "File '%s' may have an supported format\n", ent -> d_name);
                 } else {
-                    fprintf(stderr, "Warning: file '%s' may have an supported format\n", ent -> d_name);
+                    fprintf(stderr, "File '%s' may have an supported format\n", ent -> d_name);
                 }
 
             char command[DIM * 2];
@@ -600,7 +578,8 @@ void init(int argc, char **argv){
     if(number_of_img!=0)
         CACHE_N=((number_of_img-2)*30);
     alloc_response_error(HTML);
-
+    //to manage SIGPIPE signal
+    catch_signal();
 
 }
 
