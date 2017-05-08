@@ -307,9 +307,8 @@ void check_stdin(void) {
 
 
 
-// Used to map in memory HTML files which respond with
-//  error 400 or error 404
-void map_html_error(char *HTML[3]) {
+// Allocates responses with error 400 or error 404
+void alloc_response_error(char **HTML) {
     char *s = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\"><html><head>\t<link rel=\"shortcut icon\" href=\"/favicon.ico\">\n"
             " <title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>\0";
     size_t len = strlen(s) + 2 * DIM2 * sizeof(char);
@@ -317,24 +316,22 @@ void map_html_error(char *HTML[3]) {
     char *mm1 = malloc(len);
     char *mm2 = malloc(len);
     if (!mm1 || !mm2)
-        error_found("Error in malloc\n");
+        error_found(" alloc_response_error: Error in malloc\n");
     memset(mm1, (int) '\0', len); memset(mm2, (int) '\0', len);
     sprintf(mm1, s, "404 Not Found", "404 Not Found", "The requested URL was not found on this server.");
-    sprintf(mm2, s, "400 Bad Request", "Bad Request", "Your browser sent a request that this server could not derstand.");
+    sprintf(mm2, s, "400 Bad Request", "Bad Request", "Your browser sent a request that this server could not understand.");
     HTML[1] = mm1;
     HTML[2] = mm2;
 }
 
-// Used to get information from a file on the file system
-//  check values: 1 for check directory
-//                0 for check regular files
-void get_info(struct stat *buf, char *path, int check) {
+// Used to fill the structure buf with file or directory information (1 for check directory, 0 for check regular files)
+void fill_struct_stat(struct stat *buf, char *path, int check) {
     memset(buf, (int) '\0', sizeof(struct stat));
     errno = 0;
     if (stat(path, buf) != 0) {
         if (errno == ENAMETOOLONG)
             error_found("Path too long\n");
-        error_found("alloc_r_img: Invalid path\n");
+        error_found("insert_img: Invalid path\n");
     }
     if (check) {
         if (!S_ISDIR((*buf).st_mode)) {
@@ -377,7 +374,7 @@ void get_opt(int argc, char **argv, char *path, int *perc) {
 
 
             case 'i':
-                get_info(&statbuf, optarg, 1);
+                fill_struct_stat(&statbuf, optarg, 1);
 
                 if (optarg[strlen(optarg) - 1] != '/') {
                     strncpy(path, optarg, strlen(optarg));
@@ -425,45 +422,37 @@ void add_img_tag(char *s, char **html, size_t *dim) {
         ++*dim;
         *html = realloc(*html, *dim * DIM);
         if (!*html)
-            error_found("Check and build: Error in realloc\n");
+            error_found("add_img_tag: Error in realloc\n");
         memset(*html + len, (int) '\0', *dim * DIM - len);
     }
 
     char *w;
     if (!(w = strrchr(tmp_resized, '/')))
-        error_found("Unexpected error creating HTML root file\n");
+        error_found("add_img_tag: Error creating HTML file\n");
     ++w;
 
     char *q = *html + len;
     sprintf(q, k, s, s, w, s);
 }
 
-
-
-// Used to fill img dynamic structure
-void alloc_r_img(struct image **h, char *path) {
+// Insert image into the list
+void insert_img(struct image **h, char *path) {
     char new_path[DIM];
     memset(new_path, (int) '\0', DIM);
     struct image *k = malloc(sizeof(struct image));
     if (!k)
-        error_found("Error in malloc\n");
+        error_found("insert_img: Error in malloc\n");
     memset(k, (int) '\0', sizeof(struct image));
 
     char *name = strrchr(path, '/');
     if (!name) {
-        if (!strncmp(path, "favicon.ico", 11)) {
-            sprintf(new_path, "%s/%s", src_path, path);
-            strcpy(k->name, path);
-            path = new_path;
-        } else {
-            error_found("alloc_r_img: Error analyzing file");
-        }
+        error_found("insert_img: Error while parsing file path");
     } else {
         strcpy(k->name, ++name);
     }
 
     struct stat statbuf;
-    get_info(&statbuf, path, 0);
+    fill_struct_stat(&statbuf, path, 0);
 
     k->size_r = (size_t) statbuf.st_size;
     k->img_c = NULL;
@@ -512,7 +501,7 @@ void bulid_images_list(int perc) {
                 if (getcwd(pwd, sizeof(pwd)) == NULL)
                     perror("bulid_images_list: not able to get current directory path");
                 sprintf(pathFav, "%s/%s",pwd, entCurr->d_name);
-                alloc_r_img(i, pathFav);
+                insert_img(i, pathFav);
                 i = &(*i)->next_img;
                 break;
 
@@ -560,7 +549,7 @@ void bulid_images_list(int perc) {
             if (system(command))
                 error_found("bulid_images_list: Error imagemagick not able to resize\n");
 
-            alloc_r_img(i, output);
+            insert_img(i, output);
             i = &(*i) -> next_img;
             add_img_tag(ent->d_name, &html, &dim);
         }
@@ -610,7 +599,7 @@ void init(int argc, char **argv){
     //Size of cache is setted to an appropriate number
     if(number_of_img!=0)
         CACHE_N=((number_of_img-2)*30);
-    map_html_error(HTML);
+    alloc_response_error(HTML);
 
 
 }
