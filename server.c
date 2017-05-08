@@ -1,6 +1,33 @@
 #include "basic.h"
 #include "utils.h"
 
+
+void init(int argc, char **argv){
+
+    LOG= open_file("LOG");
+
+    char IMAGES_PATH[DIM];
+    memset(IMAGES_PATH, (int) '\0', DIM);
+    strcpy(IMAGES_PATH, ".");
+    int perc = 50;
+
+    get_opt(argc, argv, IMAGES_PATH,&perc);
+
+    // Create tmp folder for resized and cached images
+    if (!mkdtemp(tmp_resized) || !mkdtemp(tmp_cache))
+        error_found("Error in mkdtmp\n");
+    strcpy(src_path, IMAGES_PATH);
+
+    build_images_list(perc);
+    //Size of cache is setted to an appropriate number
+    if(number_of_img!=0)
+        CACHE_N=((number_of_img-2)*30);
+    alloc_reply_error(HTML);
+    //to manage SIGPIPE signal
+    catch_signal();
+
+}
+
 void listen_connections(void) {
     struct sockaddr_in server_addr;
 
@@ -53,7 +80,7 @@ void listen_connections(void) {
         client[i] = -1;
     FD_ZERO(&allset); /* Initialize to zero allset */
 
-    fprintf(stdout, "-Server's socket correctly created with number: %d\n", port);
+    fprintf(stdout, "Listen socket created at port: %d\n", port);
 
 }
 
@@ -87,12 +114,9 @@ void start_multiplexing_io(void){
                 continue;
 
         }
-
-/**
- * SIAMO ARRIVATI QUA!!!!!!!!!!!!!!!!!!!!
- */
-        /* Se è arrivata a richiesta di connessione, il socket di ascolto
-           è leggibile: viene invocata accept() e creato  socket di connessione */
+        /* If a connection request has arrived,
+         * the listening socket is readable: accept() is invoked
+         * anc connection socket is created */
         if (FD_ISSET(listensd, &rset)) {
             len = sizeof(cliaddr);
             connsd = accept(listensd, (struct sockaddr *)&cliaddr, &len);
@@ -100,166 +124,88 @@ void start_multiplexing_io(void){
             if (connsd == -1) {
                 switch (errno) {
                     case ECONNABORTED:
-                        error_found("The connection has been aborted\n");
+                        error_found("start_multiplexing_io: The connection has been aborted\n");
                         continue;
-
                     case ENOBUFS:
-                        error_found("Not enough free memory\n");
-
+                        error_found("start_multiplexing_io: Not enough free memory\n");
                     case ENOMEM:
-                        error_found("Not enough free memory\n");
-
+                        error_found("start_multiplexing_io: Not enough free memory\n");
                     case EMFILE:
-                        error_found("Too many open files!\n");
+                        error_found("start_multiplexing_io: Too many open files\n");
                         continue;
-
                     case EPROTO:
-                        error_found("Protocol error\n");
+                        error_found("start_multiplexing_io: Protocol error\n");
                         continue;
-
                     case EPERM:
-                        error_found("Firewall rules forbid connection\n");
+                        error_found("start_multiplexing_io: Firewall rules forbid connection\n");
                         continue;
-
                     case ETIMEDOUT:
-                        error_found("Timeout occured\n");
+                        error_found("start_multiplexing_io: Timeout occured\n");
                         continue;
-
                     case EBADF:
-                        error_found("Bad file number\n");
+                        error_found("start_multiplexing_io: Bad file descriptor\n");
                         continue;
-
                     default:
-                        error_found("Error in accept\n");
+                        error_found("start_multiplexing_io: Error in accept\n");
                 }
             }
 
-            /* Inserisce il descrittore del nuovo socket nel primo posto
-               libero di client */
+            /* Inserts the fd of newly created socket in the first free client slot */
             for (i=0; i<FD_SETSIZE; i++)
                 if (client[i] < 0) {
                     client[i] = connsd;
                     break;
                 }
-            /* Se non ci sono posti liberi in client, errore */
+            /* No free slot in client */
             if (i == FD_SETSIZE) {
-                fprintf(stderr, "errore in accept, non ci sono posti liberi\n");
-                error_found("exceeded maximum number of supported connections");
+                error_found("start_multiplexing_io: exceeded maximum number of supported connections");
             }
-            /* Altrimenti inserisce connsd tra i descrittori da controllare
-               ed aggiorna maxd */
+            /* Otherwise inserts connsd among the descriptors to be checked and update maxd */
             FD_SET(connsd, &allset);
             ++active;
             if (connsd > maxd) maxd = connsd;
             if (i > maxi) maxi = i;
-            if (--ready <= 0) /* Cicla finchè ci sono ancora descrittori
-                           leggibili da controllare */
+            /*Loop until there are fds to be checked*/
+            if (--ready <= 0)
                 continue;
         }
 
-        /* Controlla i socket attivi per controllare se sono leggibili */
+        /* Checks whether active socket are readable or not */
         for (i = 0; i <= maxi; i++) {
             if ((socksd = client[i]) < 0 )
-                /* se il descrittore non è stato selezionato viene saltato */
+                /* if the fd hasn't been selected it is skipped */
                 continue;
 
             if (FD_ISSET(socksd, &rset)) {
-                // Se socksd è leggibile, invoca la recv
-
+                //If the socket is readable, invokes the recv() functions
                 memset(http_req, (int) '\0', 5 * DIM);
                 for (x = 0; x < 7; ++x)
                     line_req[x] = NULL;
 
                 errno=0;
 
-                n = recv(socksd, http_req, 5*DIM,0);
-
-
-                if (n <0) {
-                    switch (errno) {
-                        case EACCES:
-                            fprintf(stderr, "EACCES");
-                            break;
-                        case ECONNRESET:
-                            fprintf(stderr, "ECONNRESET");
-                            break;
-                        case EDESTADDRREQ:
-                            fprintf(stderr, "EDESTADRREQ");
-                            break;
-                        case EISCONN:
-                            fprintf(stderr, "EISCONN");
-                            break;
-                        case EMSGSIZE:
-                            fprintf(stderr, "EMGSIZE");
-                            break;
-                        case ENOBUFS:
-                            fprintf(stderr, "ENOBUFS");
-                            break;
-                        case ENOMEM:
-                            fprintf(stderr, "ENOMEM");
-                            break;
-                        case EOPNOTSUPP:
-                            fprintf(stderr, "EOPTNOTSUPP");
-                            break;
-                        case EPIPE:
-                            fprintf(stderr, "EPIPE");
-                            break;
-                        case EFAULT:
-                            fprintf(stderr, "The receive  buffer  pointer(s)  point  outside  the  process's address space");
-                            break;
-
-                        case EBADF:
-                                 fprintf(stderr, "The argument of recv() is an invalid descriptor: %d\n", socksd);
-                                 break;
-
-                        case ECONNREFUSED:
-                            fprintf(stderr, "Remote host refused to allow the network connection\n");
-                            break;
-
-                        case ENOTSOCK:
-                            fprintf(stderr, "The argument of recv() does not refer to a socket\n");
-                            break;
-
-                        case EINVAL:
-                            fprintf(stderr, "Invalid argument passed\n");
-                            break;
-
-                        case EINTR:
-                            fprintf(stderr, "Timeout receiving from socket\n");
-                            break;
-
-                        case EWOULDBLOCK:
-                            fprintf(stderr, "Timeout receiving from socket\n");
-                            break;
-
-                        default:
-                            fprintf(stderr, "Error in recv: error while receiving data from client\n");
-                    }
-
-                }
+                n = ctrl_recv(socksd, http_req, 5 * DIM, 0);
 
                 if ((n == 0 )) {
-
-                    // Se legge EOF, chiude il descrittore di connessione
-                    if (close(socksd) == -1) {
-                        perror("error in close");
+                    //If it reads EOF, closes the connection descriptor
+                    if (close(socksd) == -1)
                         error_found("error in close");
 
-                    }
-                    // Rimuove socksd dalla lista dei socket da controllare
+                    // Removes socksd from the list of sockets to be checked
                     FD_CLR(socksd, &allset);
                     --active;
-                    // Cancella socksd da client
+                    // Delete socksd from client
                     client[i] = -1;
 
                 }else {
                     parse_http(http_req, line_req);
 
-                    char log_string[DIM ];
+                    //Prepares log_string
+                    char log_string[DIM];
                     memset(log_string, (int) '\0', DIM);
                     sprintf(log_string, "\t%s [%s] '%s %s %s' ",
                             inet_ntoa(cliaddr.sin_addr),get_time(), line_req[0], line_req[1], line_req[2]);
-                    if(data_to_send(socksd, line_req, log_string) == 0){
+                    if(complete_http_reply(socksd, line_req, log_string) == 0){
                         write_fstream(log_string,LOG);
                         break;
                     }

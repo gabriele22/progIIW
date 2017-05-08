@@ -2,7 +2,6 @@
 #include "basic.h"
 
 
-
 struct cache_hit *cache_hit_tail, *cache_hit_head;
 //number of active requests
 int active=0;
@@ -10,7 +9,7 @@ int active=0;
 //indexes to manage select() file descriptors
 int maxi, maxd;
 
-int number_of_img =0;
+int number_of_img=0;
 
 //select() file descriptors sets
 fd_set	rset, allset;
@@ -78,7 +77,10 @@ struct image {
 
 struct image *img;
 
+
 void clean_resources();
+
+
 // Used to get current time
 char *get_time(void) {
     time_t now = time(NULL);
@@ -114,6 +116,92 @@ void error_found(char *s) {
 
     exit(EXIT_FAILURE);
 }
+//controls return value of recv()
+ssize_t  ctrl_recv(int sockfd, void *buf, size_t len, int flags){
+    ssize_t s;
+    s= recv(sockfd,buf,len,flags);
+
+    if (s <0) {
+        switch (errno) {
+            case EFAULT:
+                fprintf(stderr, "ctr_rec: The receive  buffer  pointer(s)  point  outside  the  process's address space");
+                break;
+            case EBADF:
+                fprintf(stderr, "ctr_rec: The argument of recv() is an invalid descriptor\n");
+                break;
+            case ECONNREFUSED:
+                fprintf(stderr, "ctr_rec: Remote host refused to allow the network connection\n");
+                break;
+            case ENOTSOCK:
+                fprintf(stderr, "ctr_rec: The argument of recv() does not refer to a socket\n");
+                break;
+            case EINVAL:
+                fprintf(stderr, "ctr_rec: Invalid argument passed\n");
+                break;
+            case EINTR:
+                fprintf(stderr, "ctr_rec:Timeout receiving from socket\n");
+                break;
+            case EWOULDBLOCK:
+                fprintf(stderr, "ctr_rec:Timeout receiving from socket\n");
+                break;
+            default:
+                fprintf(stderr, "ctr_rec: Error in recv: error while receiving data from client\n");
+        }
+
+    }
+    return s;
+
+
+}
+
+// Controls the return value of send() and avoids incomplete sending
+ssize_t ctrl_send(int sd, char *s, ssize_t dim) {
+    ssize_t sent = 0;
+    char *msg = s;
+    while (sent < dim) {
+        errno=0;
+        sent = send(sd, msg, (size_t) dim, MSG_NOSIGNAL);
+
+        if (sent == -1) {
+            switch (errno) {
+                case EINTR:
+                    fprintf(stderr,"ctrl_send: A signal occurred before any  data  was  transmitted");
+                    break;
+                case EAGAIN:
+                    fprintf(stderr,"ctrl_send: The  socket  is  marked  nonblocking and the requested operation would block ");
+                    break;
+                case EBADF:
+                    fprintf(stderr,"ctrl_send: An invalid descriptor was specified.");
+                    break;
+                case EFAULT:
+                    fprintf(stderr,"ctrl_send: An invalid user space address was specified for an argument");
+                    break;
+                case EINVAL:
+                    fprintf(stderr,"ctrl_send: Invalid argument passed");
+                    break;
+                case ENOMEM:
+                    fprintf(stderr,"ctrl_send: No memory available");
+                    break;
+                case ENOTCONN:
+                    fprintf(stderr,"ctrl_send: The socket is not connected, and no target has been given.");
+                    break;
+                case ENOTSOCK:
+                    fprintf(stderr,"ctrl_send: The file descriptor sockfd does not refer to a socket");
+                    break;
+                default:
+                    fprintf(stderr,"ctrl_send: error send");
+            }
+        }
+
+        if (sent <= 0)
+            break;
+
+        msg += sent;
+        dim -= sent;
+    }
+    return sent;
+}
+
 
 
 //removes directory and its content
@@ -285,7 +373,7 @@ void check_stdin(void) {
 
 
 // Allocates responses with error 400 or error 404
-void alloc_response_error(char **HTML) {
+void alloc_reply_error(char **HTML) {
     char *s = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\"><html><head>\t<link rel=\"shortcut icon\" href=\"/favicon.ico\">\n"
             " <title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>\0";
     size_t len = strlen(s) + 2 * DIM2 * sizeof(char);
@@ -293,7 +381,7 @@ void alloc_response_error(char **HTML) {
     char *mm1 = malloc(len);
     char *mm2 = malloc(len);
     if (!mm1 || !mm2)
-        error_found(" alloc_response_error: Error in malloc\n");
+        error_found(" alloc_reply_error: Error in malloc\n");
     memset(mm1, (int) '\0', len); memset(mm2, (int) '\0', len);
     sprintf(mm1, s, "404 Not Found", "404 Not Found", "The requested URL was not found on this server.");
     sprintf(mm2, s, "400 Bad Request", "Bad Request", "Your browser sent a request that this server could not understand.");
@@ -447,7 +535,7 @@ void insert_img(struct image **h, char *path) {
 //ATTENTION: "imagemagick" package needed
 // Used to build the dynamic list of images searching for them
 //  in the current folder (favicon.ico) and in the folder specified by the user.
-void bulid_images_list(int perc) {
+void build_images_list(int perc) {
 
     DIR *dirCorr;
     struct dirent *entCurr;
@@ -470,14 +558,14 @@ void bulid_images_list(int perc) {
     if (!dirCorr) {
         if (errno == EACCES)
             error_found("Permission denied\n");
-        error_found("bulid_images_list: Impossible to open current directory\n");
+        error_found("build_images_list: Impossible to open current directory\n");
     }
     while ((entCurr = readdir(dirCorr)) != NULL) {
         if (entCurr -> d_type == DT_REG) {
             if (!strcmp(entCurr -> d_name, "favicon.ico")) {
                 char pathFav[DIM],pwd[DIM];
                 if (getcwd(pwd, sizeof(pwd)) == NULL)
-                    perror("bulid_images_list: not able to get current directory path");
+                    perror("build_images_list: not able to get current directory path");
                 sprintf(pathFav, "%s/%s",pwd, entCurr->d_name);
                 insert_img(i, pathFav);
                 i = &(*i)->next_img;
@@ -495,16 +583,16 @@ void bulid_images_list(int perc) {
     dir = opendir(src_path);
     if (!dir) {
         if (errno == EACCES)
-            error_found("bulid_images_list: Permission denied\n");
-        error_found("bulid_images_list: Impossible to open images directory\n");
+            error_found("build_images_list: Permission denied\n");
+        error_found("build_images_list: Impossible to open images directory\n");
     }
 
     size_t len_h = strlen(html), new_len_h;
 
     fprintf(stdout, "Doing initialization operations on images, please wait\n");
     while ((ent = readdir(dir)) != NULL) {
+        ++number_of_img;
         if (ent -> d_type == DT_REG) {
-            ++number_of_img;
             if (strrchr(ent -> d_name, '~')) {
                 fprintf(stderr, "File '%s' was skipped\n", ent -> d_name);
                 continue;
@@ -525,7 +613,7 @@ void bulid_images_list(int perc) {
             sprintf(command, convert, input, perc, output);
             //operation made by imagemagick
             if (system(command))
-                error_found("bulid_images_list: Error imagemagick not able to resize\n");
+                error_found("build_images_list: Error imagemagick not able to resize\n");
 
             insert_img(i, output);
             i = &(*i) -> next_img;
@@ -535,14 +623,14 @@ void bulid_images_list(int perc) {
 
     new_len_h = strlen(html);
     if (len_h == new_len_h)
-        error_found("bulid_images_list: There aren't images in the chosen directory\n");
+        error_found("build_images_list: There aren't images in the chosen directory\n");
 
     h = "</body></html>";
     if (new_len_h + DIM2 / 4 > dim * DIM) {
         ++dim;
         html = realloc(html, (size_t) dim * DIM);
         if (!html)
-            error_found("bulid_images_list: Error in realloc\n");
+            error_found("build_images_list: Error in realloc\n");
         memset(html + new_len_h, (int) '\0', (size_t) dim * DIM - new_len_h);
     }
     k = html;
@@ -552,35 +640,9 @@ void bulid_images_list(int perc) {
     HTML[0] = html;
 
     if (closedir(dir))
-        error_found("bulid_images_list: Error in closedir\n");
+        error_found("build_images_list: Error in closedir\n");
 
     fprintf(stdout, "Images resized with default quality settings in: '%s' \n", tmp_resized);
-}
-
-void init(int argc, char **argv){
-
-    LOG= open_file("LOG");
-
-    char IMAGES_PATH[DIM];
-    memset(IMAGES_PATH, (int) '\0', DIM);
-    strcpy(IMAGES_PATH, ".");
-    int perc = 50;
-
-    get_opt(argc, argv, IMAGES_PATH,&perc);
-
-    // Create tmp folder for resized and cached images
-    if (!mkdtemp(tmp_resized) || !mkdtemp(tmp_cache))
-        error_found("Error in mkdtmp\n");
-    strcpy(src_path, IMAGES_PATH);
-
-    bulid_images_list(perc);
-    //Size of cache is setted to an appropriate number
-    if(number_of_img!=0)
-        CACHE_N=((number_of_img-2)*30);
-    alloc_response_error(HTML);
-    //to manage SIGPIPE signal
-    catch_signal();
-
 }
 
 
@@ -689,72 +751,13 @@ char *get_img(char *name, size_t img_dim, char *directory) {
     return buf;
 }
 
-
-
-// Used to send HTTP messages to clients
-ssize_t send_http_msg(int sd, char *s, ssize_t dim) {
-    ssize_t sent = 0;
-    char *msg = s;
-    while (sent < dim) {
-        errno=0;
-        sent = send(sd, msg, (size_t) dim, MSG_NOSIGNAL);
-
-        if (sent == -1) {
-            switch (errno) {
-                case EINTR:
-                    perror("errore send(EINTR)");
-                    break;
-                case EAGAIN:
-                    perror("errore send(EAGAIN)");
-                    break;
-                case EBADF:
-                    perror("errore send(EBADF)");
-                    break;
-                case ECONNREFUSED:
-                    perror("errore send(ECONNREFUSED)");
-                    break;
-                case EFAULT:
-                    perror("errore send(EFAULT)");
-                    break;
-                case EINVAL:
-                    perror("errore send(EINVAL)");
-                    break;
-                case ENOMEM:
-                    perror("errore send(ENOMEM)");
-                    break;
-                case ENOTCONN:
-                    perror("errore send(ENOTCONN)");
-                    break;
-                case ENOTSOCK:
-                    perror("errore send(ENOTSOCK)");
-                    break;
-
-                default:
-                    perror("errore send");
-            }
-        }
-
-
-
-        if (sent <= 0)
-            break;
-
-        msg += sent;
-        dim -= sent;
-    }
-
-    return sent;
-}
-
-void free_time_http(char *time, char *http) {
+void clean_time_and_HTTTP(char *time, char *http) {
     free(time);
     free(http);
 }
 
-
-
 // Find and send resource for client
-int data_to_send(int sock, char **line, char *log_string) {
+int complete_http_reply(int sock, char **line, char *log_string) {
     char *http_rep = malloc(DIM * DIM * 2 * sizeof(char));
     if (!http_rep)
         error_found("Error in malloc\n");
@@ -777,9 +780,9 @@ int data_to_send(int sock, char **line, char *log_string) {
         memcpy(h, HTML[2], strlen(HTML[2]));
 
         strcat(log_string,"400 Bad Request");
-        if (send_http_msg(sock, http_rep, strlen(http_rep)) == -1) {
+        if (ctrl_send(sock, http_rep, strlen(http_rep)) == -1) {
             fprintf(stderr, "Error while sending data to client(400 bad request)\n");
-            free_time_http(t, http_rep);
+            clean_time_and_HTTTP(t, http_rep);
             return -1;
         }
 
@@ -794,9 +797,9 @@ int data_to_send(int sock, char **line, char *log_string) {
             memcpy(h, HTML[0], strlen(HTML[0]));
         }
         strcat(log_string,"200 OK");
-        if (send_http_msg(sock, http_rep, strlen(http_rep)) == -1) {
+        if (ctrl_send(sock, http_rep, strlen(http_rep)) == -1) {
             fprintf(stderr, "Error while sending data to client\n");
-            free_time_http(t, http_rep);
+            clean_time_and_HTTTP(t, http_rep);
             return -1;
         }
     }else {
@@ -806,7 +809,7 @@ int data_to_send(int sock, char **line, char *log_string) {
             i = NULL;
         ++p_name;
         char *p = tmp_resized + strlen("/tmp");
-        // Finding image in the image structure
+        // Finding image in the image list
         while (i) {
             if (!strncmp(p_name, i->name, strlen(i->name))) {
                 ssize_t dim = 0;
@@ -818,21 +821,21 @@ int data_to_send(int sock, char **line, char *log_string) {
                     if (strncmp(line[0], "HEAD", 4)) {
                         img_to_send = get_img(p_name, i->size_r, favicon ? tmp_resized : ".");
                         if (!img_to_send) {
-                            fprintf(stderr, "data_to_send: Error in get_img\n");
-                            free_time_http(t, http_rep);
+                            fprintf(stderr, "complete_http_reply: Error in get_img\n");
+                            clean_time_and_HTTTP(t, http_rep);
                             return -1;
                         }
                     }
                     dim = i->size_r;
                 } else {
-                    // Looking for image in memory cache
+                    // Find image in memory cache
                     char name_cached_img[DIM / 2];
                     memset(name_cached_img, (int) '\0', sizeof(char) * DIM / 2);
                     struct cache *c;
                     int def_val = 70;
                     int processing_accept = parse_q_factor(line[5]);
                     if (processing_accept == -1)
-                        fprintf(stderr, "data_to_send: Unexpected error in strtod\n");
+                        fprintf(stderr, "complete_http_reply: Unexpected error in strtod\n");
                     int q = processing_accept < 0 ? def_val : processing_accept;
                     c = i->img_c;
                     while (c) {
@@ -882,8 +885,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                             memset(command, (int) '\0', DIM);
                             sprintf(command, format, src_path, p_name, q, tmp_cache, name_cached_img);
                             if (system(command)) {
-                                fprintf(stderr, "data_to_send: Unexpected error while refactoring image\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Unexpected error while refactoring image\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -894,17 +897,17 @@ int data_to_send(int sock, char **line, char *log_string) {
                             if (stat(path, &buf) != 0) {
                                 if (errno == ENAMETOOLONG) {
                                     fprintf(stderr, "Path too long\n");
-                                    free_time_http(t, http_rep);
+                                    clean_time_and_HTTTP(t, http_rep);
 
                                     return -1;
                                 }
-                                fprintf(stderr, "data_to_send: Invalid path\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Invalid path\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             } else if (!S_ISREG(buf.st_mode)) {
                                 fprintf(stderr, "Non-regular files can not be analysed!\n");
-                                free_time_http(t, http_rep);
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -914,8 +917,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                             memset(new_entry, (int) '\0', sizeof(struct cache));
                             memset(new_hit, (int) '\0', sizeof(struct cache_hit));
                             if (!new_entry || !new_hit) {
-                                fprintf(stderr, "data_to_send: Error in malloc\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Error in malloc\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -953,13 +956,13 @@ int data_to_send(int sock, char **line, char *log_string) {
                             dir = opendir(tmp_cache);
                             if (!dir) {
                                 if (errno == EACCES) {
-                                    fprintf(stderr, "data_to_send: Error in opendir: Permission denied\n");
-                                    free_time_http(t, http_rep);
+                                    fprintf(stderr, "complete_http_reply: Error in opendir: Permission denied\n");
+                                    clean_time_and_HTTTP(t, http_rep);
 
                                     return -1;
                                 }
-                                fprintf(stderr, "data_to_send: Error in opendir\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Error in opendir\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -978,9 +981,9 @@ int data_to_send(int sock, char **line, char *log_string) {
                             }
 
                             if (closedir(dir)) {
-                                fprintf(stderr, "data_to_send: Error in closedir\n");
+                                fprintf(stderr, "complete_http_reply: Error in closedir\n");
                                 free(img_to_send);
-                                free_time_http(t, http_rep);
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -991,8 +994,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                             memset(command, (int) '\0', DIM);
                             sprintf(command, format, src_path, p_name, q, tmp_cache, name_cached_img);
                             if (system(command)) {
-                                fprintf(stderr, "data_to_send: Unexpected error while refactoring image\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Unexpected error while refactoring image\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -1003,17 +1006,17 @@ int data_to_send(int sock, char **line, char *log_string) {
                             if (stat(path, &buf) != 0) {
                                 if (errno == ENAMETOOLONG) {
                                     fprintf(stderr, "Path too long\n");
-                                    free_time_http(t, http_rep);
+                                    clean_time_and_HTTTP(t, http_rep);
 
                                     return -1;
                                 }
-                                fprintf(stderr, "data_to_send: Invalid path\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Invalid path\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             } else if (!S_ISREG(buf.st_mode)) {
                                 fprintf(stderr, "Non-regular files can not be analysed!\n");
-                                free_time_http(t, http_rep);
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -1021,8 +1024,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                             struct cache *new_entry = malloc(sizeof(struct cache));
                             memset(new_entry, (int) '\0', sizeof(struct cache));
                             if (!new_entry) {
-                                fprintf(stderr, "data_to_send: Error in malloc\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Error in malloc\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -1033,8 +1036,7 @@ int data_to_send(int sock, char **line, char *log_string) {
                             i->img_c = new_entry;
                             c = i->img_c;
 
-                            // To find and delete oldest requested
-                            //  element from cache structure
+                            // To find and delete oldest requested image
                             struct image *img_ptr = img;
                             struct cache *cache_ptr, *cache_prev = NULL;
                             char *ext = strrchr(cache_hit_tail->cache_name, '_');
@@ -1061,9 +1063,9 @@ int data_to_send(int sock, char **line, char *log_string) {
                                         cache_ptr = cache_ptr->next_img_c;
                                     }
                                     if (!cache_ptr) {
-                                        fprintf(stderr, "data_to_send: Error! struct cache compromised\n"
+                                        fprintf(stderr, "complete_http_reply: Error! struct cache compromised\n"
                                                 "-Cache size automatically set to Unlimited\n\t\tfinding: %s\n", name_i);
-                                        free_time_http(t, http_rep);
+                                        clean_time_and_HTTTP(t, http_rep);
                                         CACHE_N = -1;
 
                                         return -1;
@@ -1074,9 +1076,9 @@ int data_to_send(int sock, char **line, char *log_string) {
                             }
                             if (!img_ptr) {
                                 CACHE_N = -1;
-                                fprintf(stderr, "data_to_send: Unexpected error while looking for image in struct image\n"
+                                fprintf(stderr, "complete_http_reply: Unexpected error while looking for image in struct image\n"
                                         "-Cache size automatically set to Unlimited\n\t\tfinding: %s\n", name_i);
-                                free_time_http(t, http_rep);
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -1084,8 +1086,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                             struct cache_hit *new_hit = malloc(sizeof(struct cache_hit));
                             memset(new_hit, (int) '\0', sizeof(struct cache_hit));
                             if (!new_hit) {
-                                fprintf(stderr, "data_to_send: Error in malloc\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Error in malloc\n");
+                                clean_time_and_HTTTP(t, http_rep);
 
                                 return -1;
                             }
@@ -1109,12 +1111,12 @@ int data_to_send(int sock, char **line, char *log_string) {
                         dir = opendir(tmp_cache);
                         if (!dir) {
                             if (errno == EACCES) {
-                                fprintf(stderr, "data_to_send: Error in opendir: Permission denied\n");
-                                free_time_http(t, http_rep);
+                                fprintf(stderr, "complete_http_reply: Error in opendir: Permission denied\n");
+                                clean_time_and_HTTTP(t, http_rep);
                                 return -1;
                             }
-                            fprintf(stderr, "data_to_send: Error in opendir\n");
-                            free_time_http(t, http_rep);
+                            fprintf(stderr, "complete_http_reply: Error in opendir\n");
+                            clean_time_and_HTTTP(t, http_rep);
                             return -1;
                         }
 
@@ -1123,8 +1125,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                                 if (!strncmp(ent->d_name, name_cached_img, strlen(name_cached_img))) {
                                     img_to_send = get_img(name_cached_img, c->size_q, tmp_cache);
                                     if (!img_to_send) {
-                                        fprintf(stderr, "data_to_send: Error in get_img\n");
-                                        free_time_http(t, http_rep);
+                                        fprintf(stderr, "complete_http_reply: Error in get_img\n");
+                                        clean_time_and_HTTTP(t, http_rep);
                                         return -1;
                                     }
                                     break;
@@ -1133,9 +1135,9 @@ int data_to_send(int sock, char **line, char *log_string) {
                         }
 
                         if (closedir(dir)) {
-                            fprintf(stderr, "data_to_send: Error in closedir\n");
+                            fprintf(stderr, "complete_http_reply: Error in closedir\n");
                             free(img_to_send);
-                            free_time_http(t, http_rep);
+                            clean_time_and_HTTTP(t, http_rep);
                             return -1;
                         }
                     }
@@ -1148,8 +1150,8 @@ int data_to_send(int sock, char **line, char *log_string) {
                     if (dim_tot + dim > DIM * DIM * 2) {
                         http_rep = realloc(http_rep, (dim_tot + dim) * sizeof(char));
                         if (!http_rep) {
-                            fprintf(stderr, "data_to_send: Error in realloc\n");
-                            free_time_http(t, http_rep);
+                            fprintf(stderr, "complete_http_reply: Error in realloc\n");
+                            clean_time_and_HTTTP(t, http_rep);
                             free(img_to_send);
                             return -1;
                         }
@@ -1160,9 +1162,9 @@ int data_to_send(int sock, char **line, char *log_string) {
                     memcpy(h, img_to_send, (size_t) dim);
                     dim_tot += dim;
                 }
-                if (send_http_msg(sock, http_rep, dim_tot) == -1) {
-                    fprintf(stderr, "data_to_send: Error while sending data to client(good request)\n");
-                    free_time_http(t, http_rep);
+                if (ctrl_send(sock, http_rep, dim_tot) == -1) {
+                    fprintf(stderr, "complete_http_reply: Error while sending data to client(good request)\n");
+                    clean_time_and_HTTTP(t, http_rep);
                     return -1;
                 }
 
@@ -1180,21 +1182,19 @@ int data_to_send(int sock, char **line, char *log_string) {
                 memcpy(h, HTML[1], strlen(HTML[1]));
             }
             strcat(log_string,"404 Not Found");
-            if (send_http_msg(sock, http_rep, strlen(http_rep)) == -1) {
+            if (ctrl_send(sock, http_rep, strlen(http_rep)) == -1) {
                 fprintf(stderr, "Error while sending data to client(404 not found)\n");
-                free_time_http(t, http_rep);
+                clean_time_and_HTTTP(t, http_rep);
                 return -1;
             }
         }else strcat(log_string,"200 OK");
     }
 
-    free_time_http(t, http_rep);
+    clean_time_and_HTTTP(t, http_rep);
     return 0;
 }
 
-
-
-// Used to split HTTP message
+// Used to parse request message
 void parse_http(char *s, char **d) {
     char *msg_type[4];
     msg_type[0] = "Connection: ";
