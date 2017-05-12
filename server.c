@@ -1,35 +1,14 @@
 #include "basic.h"
-#include "utils.h"
+#include "http_image.h"
 
+//array that keep trace of the active connections
+int client[FD_SETSIZE];
+//indexes to manage select() file descriptors
+int maxi, maxd;
 
-void init(int argc, char **argv){
-
-    LOG= open_file("LOG");
-
-    char IMAGES_PATH[DIM];
-    memset(IMAGES_PATH, (int) '\0', DIM);
-    strcpy(IMAGES_PATH, ".");
-    int perc = 50;
-
-    get_opt(argc, argv, IMAGES_PATH,&perc);
-
-    // Create tmp folder for resized and cached images
-    if (!mkdtemp(tmp_resized) || !mkdtemp(tmp_cache))
-        error_found("Error in mkdtmp\n");
-    strcpy(src_path, IMAGES_PATH);
-
-    build_images_list(perc);
-    //Size of cache is setted to an appropriate number
-    if(number_of_img!=0)
-        CACHE_N=((number_of_img-2)*30);
-    alloc_reply_error(HTML);
-    //to manage SIGPIPE signal
-    catch_signal();
-
-}
-
-void listen_connections(void) {
+int listen_connections(int port) {
     struct sockaddr_in server_addr;
+    int listensd, BACKLOG = 1000;
 
     if ((listensd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         error_found("listen_connections: Error listen socket creations\n");
@@ -69,7 +48,7 @@ void listen_connections(void) {
     char textStart[MAXLINE];
     char *t= get_time();
     sprintf(textStart,"%s%s%s","-------------SERVER START[",t,"]-----------------");
-    write_fstream(textStart,LOG);
+    write_fstream(textStart,log_file);
 
     int i;
     /* Initialize fds numbers */
@@ -78,36 +57,42 @@ void listen_connections(void) {
     /* Initialize array  client containing used fds*/
     for (i = 0; i < FD_SETSIZE; i++)
         client[i] = -1;
-    FD_ZERO(&allset); /* Initialize to zero allset */
 
     fprintf(stdout, "Listen socket created at port: %d\n", port);
-
+    return listensd;
 }
 
-void start_multiplexing_io(void){
+void start_multiplexing_io(int listensd){
 
     int			connsd, socksd;
     int			i,x;
     int			ready;
-    ssize_t		n;
     struct sockaddr_in	 cliaddr;
-    socklen_t		len;
+    socklen_t	len;
     char http_req[DIM * DIM];
-    char *line_req[7];
+    char *line_req[7], *http_reply=NULL;
+    ssize_t dim_reply;
+    fd_set	rset, allset;
+
+    //number of active connections
+    int active_conn=0;
+
+    FD_ZERO(&allset); /* Initialize to zero allset */
 
     FD_SET(listensd, &allset); /* Insert the listening socket into the set */
     FD_SET(fileno(stdin), &allset); /* Insert stdin into the set */
 
     for ( ; ; ) {
+        struct timeval tv = {180, 0};
         rset = allset;  /* Configure read fds set */
         /* select returns the number of ready descriptors */
-        if ((ready = select(maxd+1, &rset, NULL, NULL, NULL)) < 0) {
+        if ((ready = select(maxd+1, &rset, NULL, NULL, &tv)) < 0) {
             perror("errore in select");
             exit(1);
         }
         //check whether the user types a character on stdin
         if(FD_ISSET(fileno(stdin), &rset)) {
-            check_stdin();
+            check_stdin(listensd, active_conn);
 
             if (fileno(stdin) > maxd) maxd = fileno(stdin);
             if (--ready <= 0)
@@ -116,7 +101,7 @@ void start_multiplexing_io(void){
         }
         /* If a connection request has arrived,
          * the listening socket is readable: accept() is invoked
-         * anc connection socket is created */
+         * and connection socket is created */
         if (FD_ISSET(listensd, &rset)) {
             len = sizeof(cliaddr);
             connsd = accept(listensd, (struct sockaddr *)&cliaddr, &len);
@@ -162,7 +147,7 @@ void start_multiplexing_io(void){
             }
             /* Otherwise inserts connsd among the descriptors to be checked and update maxd */
             FD_SET(connsd, &allset);
-            ++active;
+            ++active_conn;
             if (connsd > maxd) maxd = connsd;
             if (i > maxi) maxi = i;
             /*Loop until there are fds to be checked*/
@@ -184,38 +169,36 @@ void start_multiplexing_io(void){
 
                 errno=0;
 
-                n = ctrl_recv(socksd, http_req, 5 * DIM, 0);
 
-                if ((n == 0 )) {
+
+                if (ctrl_recv(socksd, http_req, 5 * DIM, 0)==0) {
                     //If it reads EOF, closes the connection descriptor
                     if (close(socksd) == -1)
                         error_found("error in close");
 
                     // Removes socksd from the list of sockets to be checked
                     FD_CLR(socksd, &allset);
-                    --active;
+                    --active_conn;
                     // Delete socksd from client
                     client[i] = -1;
 
                 }else {
+                    printf("%s\n",http_req);
                     parse_http(http_req, line_req);
 
                     //Prepares log_string
                     char log_string[DIM];
                     memset(log_string, (int) '\0', DIM);
-                    sprintf(log_string, "\t%s [%s] '%s %s %s' ",
-                            inet_ntoa(cliaddr.sin_addr),get_time(), line_req[0], line_req[1], line_req[2]);
-                    if(complete_http_reply(socksd, line_req, log_string) == 0){
-                        write_fstream(log_string,LOG);
-                        break;
+                    sprintf(log_string, "\t%s [%s] '%s %s %s' ", inet_ntoa(cliaddr.sin_addr),get_time(), line_req[0], line_req[1], line_req[2]);
+                    if(complete_http_reply(line_req, log_string, &http_reply,&dim_reply) == 0){
+                        ctrl_send(socksd, http_reply, dim_reply);
+                        write_fstream(log_string,log_file);
                     }
-
+                    free(http_reply);
                     if (--ready <= 0) break;
                 }
             }
         }
-
-
 
     }
 
@@ -226,10 +209,10 @@ void start_multiplexing_io(void){
 int main(int argc, char **argv)
 {
     //function used to initialize parameters option, create services file and directories
-    init(argc,argv);
+    int port= init(argc,argv);
     //set server in listening state
-    listen_connections();
+    int listensd= listen_connections(port);
     //the core of server based on events
-    start_multiplexing_io();
+    start_multiplexing_io(listensd);
 
 }
