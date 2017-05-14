@@ -32,13 +32,14 @@ void write_fstream(char *s, FILE *file) {
 /*prints on stderr and updates log_file file when an error occours */
 void error_found(char *s) {
     fprintf(stderr, "%s", s);
-    char *t =get_time();
-    strcat(s,t);
+    char f[MAXLINE];
+    strcpy(f,s);
+    if(f[strlen(f)-1]=='\n')
+        f[strlen(f)-1]='\0';
+
     char fail[MAXLINE*2];
-    sprintf(fail,"FAILURE--> %s",s);
-
+    sprintf(fail,"FAILURE--> %s [%s]",f,get_time());
     write_fstream(fail,log_file);
-
     clean_resources();
 
     exit(EXIT_FAILURE);
@@ -48,33 +49,34 @@ void error_found(char *s) {
 //controls return value of recv()
 ssize_t  ctrl_recv(int sockfd, void *buf, size_t len, int flags){
     ssize_t s;
+    errno=0;
     s= recv(sockfd,buf,len,flags);
 
     if (s <0) {
         switch (errno) {
             case EFAULT:
-                fprintf(stderr, "ctr_rec: The receive  buffer  pointer(s)  point  outside  the  process's address space");
+                fprintf(stderr, "ctr_recv: The receive  buffer  pointer(s)  point  outside  the  process's address space");
                 break;
             case EBADF:
-                fprintf(stderr, "ctr_rec: The argument of recv() is an invalid descriptor\n");
+                fprintf(stderr, "ctr_recv: The argument of recv() is an invalid descriptor\n");
                 break;
             case ECONNREFUSED:
-                fprintf(stderr, "ctr_rec: Remote host refused to allow the network connection\n");
+                fprintf(stderr, "ctr_recv: Remote host refused to allow the network connection\n");
                 break;
             case ENOTSOCK:
-                fprintf(stderr, "ctr_rec: The argument of recv() does not refer to a socket\n");
+                fprintf(stderr, "ctr_recv: The argument of recv() does not refer to a socket\n");
                 break;
             case EINVAL:
-                fprintf(stderr, "ctr_rec: Invalid argument passed\n");
+                fprintf(stderr, "ctr_recv: Invalid argument passed\n");
                 break;
             case EINTR:
-                fprintf(stderr, "ctr_rec:Timeout receiving from socket\n");
+                fprintf(stderr, "ctr_recv:Timeout receiving from socket\n");
                 break;
             case EWOULDBLOCK:
-                fprintf(stderr, "ctr_rec:Timeout receiving from socket\n");
+                fprintf(stderr, "ctr_recv:Timeout receiving from socket\n");
                 break;
             default:
-                fprintf(stderr, "ctr_rec: Error in recv: error while receiving data from client\n");
+                fprintf(stderr, "ctr_recv: Error in recv: error while receiving data from client\n");
         }
 
     }
@@ -92,7 +94,6 @@ ssize_t ctrl_send(int sd, char *s, ssize_t dim) {
         sent = send(sd, msg, (size_t) dim, MSG_NOSIGNAL);
 
         if (sent == -1) {
-            free(s);
             switch (errno) {
                 case EINTR:
                     fprintf(stderr,"ctrl_send: A signal occurred before any  data  was  transmitted");

@@ -73,6 +73,7 @@ void start_multiplexing_io(int listensd){
     char *line_req[7], *http_reply=NULL;
     ssize_t dim_reply;
     fd_set	rset, allset;
+    char log_string[DIM*2],dim_string[DIM];
 
     //number of active connections
     int active_conn=0;
@@ -167,8 +168,6 @@ void start_multiplexing_io(int listensd){
                 for (x = 0; x < 7; ++x)
                     line_req[x] = NULL;
 
-                errno=0;
-
 
 
                 if (ctrl_recv(socksd, http_req, 5 * DIM, 0)==0) {
@@ -186,15 +185,19 @@ void start_multiplexing_io(int listensd){
                     printf("%s\n",http_req);
                     parse_http(http_req, line_req);
 
-                    //Prepares log_string
-                    char log_string[DIM];
-                    memset(log_string, (int) '\0', DIM);
+                    memset(log_string, (int) '\0', DIM*2);
                     sprintf(log_string, "\t%s [%s] '%s %s %s' ", inet_ntoa(cliaddr.sin_addr),get_time(), line_req[0], line_req[1], line_req[2]);
                     if(complete_http_reply(line_req, log_string, &http_reply,&dim_reply) == 0){
                         ctrl_send(socksd, http_reply, dim_reply);
+
+                        free(http_reply);
+                        memset(dim_string, (int) '\0', DIM);
+                        sprintf(dim_string," %zi\r", dim_reply);
+                        memset(&dim_reply, (int) '\0', sizeof(ssize_t));
+
+                        strcat(log_string,dim_string);
                         write_fstream(log_string,log_file);
-                    }
-                    free(http_reply);
+                    }else free(http_reply);
                     if (--ready <= 0) break;
                 }
             }
