@@ -2,11 +2,16 @@
 #include "basic.h"
 
 
+
+
 FILE *log_file = NULL;
 volatile int cache_size=0;
 char src_path[DIM / 2];
 
+
+
 void clean_resources();
+
 
 // Used to get current time
 char *get_time(void) {

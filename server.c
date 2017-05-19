@@ -58,7 +58,7 @@ int listen_connections(int port) {
     for (i = 0; i < FD_SETSIZE; i++)
         client[i] = -1;
 
-    fprintf(stdout, "Listen socket created at port: %d\n", port);
+    fprintf(stdout, "Listen socket created at port: %d\nServer is ready.\n", port);
     return listensd;
 }
 
@@ -182,7 +182,6 @@ void start_multiplexing_io(int listensd){
                     client[i] = -1;
 
                 }else {
-                    printf("%s\n",http_req);
                     parse_http(http_req, line_req);
 
                     memset(log_string, (int) '\0', DIM*2);

@@ -9,8 +9,8 @@ struct image *img;
 int number_of_img=0;
 char *HTML[3];
 struct cache_hit *cache_hit_tail, *cache_hit_head;
-char img_home[DIM2] = "/tmp/img_home.XXXXXX";
-char img_cache[DIM2] = "/tmp/img_cache.XXXXXX";
+char img_to_home[DIM2] = "/tmp/img_to_home.XXXXXX";
+char img_in_cache[DIM2] = "/tmp/img_in_cache.XXXXXX";
 
 // Deallocates memory and remove utility folders
 void clean_resources() {
@@ -25,8 +25,8 @@ void clean_resources() {
             free(to_be_removed);
         }
     }
-    remove_directory(img_home);
-    remove_directory(img_cache);
+    remove_directory(img_to_home);
+    remove_directory(img_in_cache);
 }
 
 // Insert image into the list
@@ -74,7 +74,7 @@ void add_img_tag(char *s, char **html, size_t *dim) {
     }
 
     char *w;
-    if (!(w = strrchr(img_home, '/')))
+    if (!(w = strrchr(img_to_home, '/')))
         error_found("add_img_tag: Error creating HTML file\n");
     ++w;
 
@@ -141,7 +141,7 @@ void creat_imgList_html(int perc) {
 
     size_t len_h = strlen(html), new_len_h;
 
-    fprintf(stdout, "Doing initialization operations on images, please wait\n");
+    fprintf(stdout, "Please wait...\n");
     while ((ent = readdir(dir)) != NULL) {
         ++number_of_img;
         if (ent->d_type == DT_REG) {
@@ -161,11 +161,11 @@ void creat_imgList_html(int perc) {
             char command[DIM * 2];
             memset(command, (int) '\0', DIM * 2);
             sprintf(input, "%s/%s", src_path, ent->d_name);
-            sprintf(output, "%s/%s", img_home, ent->d_name);
+            sprintf(output, "%s/%s", img_to_home, ent->d_name);
             sprintf(command, convert, input, perc, output);
             //operation made by imagemagick
             if (system(command))
-                error_found("creat_imgList_html: Error imagemagick not able to resize\n");
+                error_found("creat_imgList_html:imagemagick package is required\\nUSE 'make packages' COMMAND TO INSTALL IT\n");
 
             insert_img(i, output);
             i = &(*i)->next_img;
@@ -199,12 +199,11 @@ void creat_imgList_html(int perc) {
         if (number_of_img != 0)
             cache_size = ((number_of_img - 2) * 30);
     }
-    fprintf(stdout, "Images resized with default quality settings in: '%s' \n", img_home);
+    fprintf(stdout, "Home images resized in: '%s' \n", img_to_home);
 }
 
 // Allocates responses with error 400 or error 404
 void creat_reply_error() {
-    printf("cache size dopo %d\n", cache_size);
     char *s = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\"><html><head>\t<link rel=\"shortcut icon\" href=\"/favicon.ico\">\n"
             " <title>%s</title></head><body><h1>%s</h1><p>%s</p></body></html>\0";
     size_t len = strlen(s) + 2 * DIM2 * sizeof(char);
@@ -223,14 +222,14 @@ void creat_reply_error() {
 
 
 int parse_q_factor(char *h_accept) {
-   /*
+
     double q;
     char *chr;
 
     if(h_accept) {
         chr = strrchr(h_accept, 'q');
         if (!chr)
-            q = 1.0;
+            q = 0.5;
         else {
             errno = 0;
             q = strtod(chr + 2, NULL);
@@ -238,54 +237,8 @@ int parse_q_factor(char *h_accept) {
             if (errno != 0)
                 return -1;
         }
-    }else q =0.1;
-    */
+    }else q =0.5;
 
-    double images, others, q;
-    images = others = q = -2.0;
-    char *chr, *t1 = strtok(h_accept, ",");
-    if (!h_accept || !t1) {
-        return (int) (q * 100);
-    }
-    do {
-        while (*t1 == ' ')
-            ++t1;
-
-        if (!strncmp(t1, "image", strlen("image"))) {
-            chr = strrchr(t1, '=');
-            // If not specified the 'q' value or if there was
-            //  an error in transmission, the default
-            //  value of 'q' is 1.0
-            if (!chr) {
-                images = 1.0;
-                break;
-            } else {
-                errno = 0;
-                double tmp = strtod(++chr, NULL);
-                if (tmp > images)
-                    images = tmp;
-                if (errno != 0)
-                    return -1;
-            }
-        } else if (!strncmp(t1, "*", strlen("*"))) {
-            chr = strrchr(t1, '=');
-            if (!chr) {
-                others = 1.0;
-            } else {
-                errno = 0;
-                others = strtod(++chr, NULL);
-                if (errno != 0)
-                    return -1;
-            }
-        }
-    } while ((t1 = strtok(NULL, ",")));
-
-    if (images > others || (others > images && images != -2.0))
-        q = images;
-    else if (others > images && images == -2.0)
-        q = others;
-    else
-        fprintf(stderr, "parse_q_factor: quality factor not found in '%s\t\t\n", h_accept);
 
     return (int) (q * 100);
 }
@@ -333,7 +286,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
         if (!(p_name = strrchr(line[1], '/')))
             i = NULL;
         ++p_name;
-        char *p = img_home + strlen("/tmp");
+        char *p = img_to_home + strlen("/tmp");
         // Finding image in the image list
         while (i) {
             if (!strncmp(p_name, i->name, strlen(i->name))) {
@@ -343,7 +296,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                 if (!strncmp(p, line[1], strlen(p) - strlen(".XXXXXX")) || !(favicon = strncmp(p_name, "favicon.ico", strlen("favicon.ico")))) {
                     // Looking for resized image or favicon.ico
                     if (strncmp(line[0], "HEAD", 4)) {
-                        img_to_send = get_img(p_name, i->size_r, favicon ? img_home : ".");
+                        img_to_send = get_img(p_name, i->size_r, favicon ? img_to_home : ".");
                         if (!img_to_send) {
                             fprintf(stderr, "complete_http_reply: Error in get_img\n");
                             return -1;
@@ -355,12 +308,11 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                     char name_cached_img[DIM / 2];
                     memset(name_cached_img, (int) '\0', sizeof(char) * DIM / 2);
                     struct cache *c;
-                    int def_val = 70;
+                    int def_val = 50;
                     int processing_accept = parse_q_factor(line[5]);
                     if (processing_accept == -1)
                         fprintf(stderr, "complete_http_reply: Unexpected error in strtod\n");
                     int q = processing_accept < 0 ? def_val : processing_accept;
-                    printf("QUAL: %d\n", q);
                     c = i->img_c;
                     while (c) {
                         if (c->q == q) {
@@ -397,7 +349,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                         sprintf(name_cached_img, "%s_%d", p_name, q);
                         char path[DIM / 2];
                         memset(path, (int) '\0', DIM / 2);
-                        sprintf(path, "%s/%s", img_cache, name_cached_img);
+                        sprintf(path, "%s/%s", img_in_cache, name_cached_img);
 
                         if (cache_size > 0) {
                             // If it has not yet reached
@@ -406,7 +358,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                             char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
-                            sprintf(command, format, src_path, p_name, q, img_cache, name_cached_img);
+                            sprintf(command, format, src_path, p_name, q, img_in_cache, name_cached_img);
                             if (system(command)) {
                                 fprintf(stderr, "complete_http_reply: Unexpected error while refactoring image\n");
 
@@ -415,21 +367,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
 
                             struct stat buf;
                             memset(&buf, (int) '\0', sizeof(struct stat));
-                            errno = 0;
-                            if (stat(path, &buf) != 0) {
-                                if (errno == ENAMETOOLONG) {
-                                    fprintf(stderr, "complete_http_reply: Path too long\n");
-
-                                    return -1;
-                                }
-                                fprintf(stderr, "complete_http_reply: Invalid path\n");
-
-                                return -1;
-                            } else if (!S_ISREG(buf.st_mode)) {
-                                fprintf(stderr, "Non-regular files can not be analysed!\n");
-
-                                return -1;
-                            }
+                            ctrl_stat(&buf,path,0);
 
                             struct cache *new_entry = malloc(sizeof(struct cache));
                             struct cache_hit *new_hit = malloc(sizeof(struct cache_hit));
@@ -456,9 +394,9 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                                 cache_hit_head->next_hit = new_hit;
                                 cache_hit_head = cache_hit_head->next_hit;
                             }
-                            printf("%d\n", cache_size);
+
                             --cache_size;
-                            printf("dopo decr: %d\n", cache_size);
+
                         } else if (!cache_size){
                             printf("caso cache piena: %d\n", cache_size);
                             // Cache full.
@@ -466,12 +404,12 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                             // You choose to delete the oldest requested element.
                             char name_to_remove[DIM / 2];
                             memset(name_to_remove, (int) '\0', DIM / 2);
-                            sprintf(name_to_remove, "%s/%s", img_cache, cache_hit_tail->cache_name);
+                            sprintf(name_to_remove, "%s/%s", img_in_cache, cache_hit_tail->cache_name);
 
                             DIR *dir;
                             struct dirent *ent;
                             errno = 0;
-                            dir = opendir(img_cache);
+                            dir = opendir(img_in_cache);
                             if (!dir) {
                                 if (errno == EACCES) {
                                     fprintf(stderr, "complete_http_reply: Error in opendir: Permission denied\n");
@@ -507,7 +445,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                             char *format = "convert %s/%s -quality %d %s/%s;exit";
                             char command[DIM];
                             memset(command, (int) '\0', DIM);
-                            sprintf(command, format, src_path, p_name, q, img_cache, name_cached_img);
+                            sprintf(command, format, src_path, p_name, q, img_in_cache, name_cached_img);
                             if (system(command)) {
                                 fprintf(stderr, "complete_http_reply: Unexpected error while refactoring image\n");
 
@@ -516,23 +454,9 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
 
                             struct stat buf;
                             memset(&buf, (int) '\0', sizeof(struct stat));
-                            //---___----DA TOGLIERE E USARE LA "CTRL_STAT"------__----__---__--
-                            errno = 0;
-                            if (stat(path, &buf) != 0) {
-                                if (errno == ENAMETOOLONG) {
-                                    fprintf(stderr, "Path too long\n");
 
-                                    return -1;
-                                }
-                                fprintf(stderr, "complete_http_reply: Invalid path\n");
+                            ctrl_stat(&buf,path,0);
 
-                                return -1;
-                            } else if (!S_ISREG(buf.st_mode)) {
-                                fprintf(stderr, "Non-regular files can not be analysed!\n");
-
-                                return -1;
-                            }
-                            //__----__---_---_-----______-----__--_----_____-------------____
                             struct cache *new_entry = malloc(sizeof(struct cache));
                             memset(new_entry, (int) '\0', sizeof(struct cache));
                             if (!new_entry) {
@@ -547,21 +471,20 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                             i->img_c = new_entry;
                             c = i->img_c;
 
-                            // To find and delete oldest requested image
+                            // To find and delete oldest hits
                             struct image *img_ptr = img;
                             struct cache *cache_ptr, *cache_prev = NULL;
                             char *ext = strrchr(cache_hit_tail->cache_name, '_');
                             size_t dim_fin = strlen(ext);
                             char name_i[DIM / 2];
                             memset(name_i, (int) '\0', DIM / 2);
-                            strncpy(name_i, cache_hit_tail->cache_name,
-                                    strlen(cache_hit_tail->cache_name) - dim_fin);
+                            strncpy(name_i, cache_hit_tail->cache_name, strlen(cache_hit_tail->cache_name) - dim_fin);
                             while (img_ptr) {
                                 if (!strncmp(img_ptr->name, name_i, strlen(name_i))) {
                                     cache_ptr = img_ptr->img_c;
                                     while (cache_ptr) {
-                                        if (!strncmp(cache_ptr->img_q, cache_hit_tail->cache_name,
-                                                     strlen(cache_hit_tail->cache_name))) {
+                                        if (!strncmp(cache_ptr->img_q, cache_hit_tail->cache_name, strlen(cache_hit_tail->cache_name))) {
+
                                             if (!cache_prev)
                                                 img_ptr->img_c = cache_ptr->next_img_c;
                                             else
@@ -615,7 +538,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                         DIR *dir;
                         struct dirent *ent;
                         errno = 0;
-                        dir = opendir(img_cache);
+                        dir = opendir(img_in_cache);
                         if (!dir) {
                             if (errno == EACCES) {
                                 fprintf(stderr, "complete_http_reply: Error in opendir: Permission denied\n");
@@ -628,7 +551,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                         while ((ent = readdir(dir)) != NULL) {
                             if (ent->d_type == DT_REG) {
                                 if (!strncmp(ent->d_name, name_cached_img, strlen(name_cached_img))) {
-                                    img_to_send = get_img(name_cached_img, c->size_q, img_cache);
+                                    img_to_send = get_img(name_cached_img, c->size_q, img_in_cache);
                                     if (!img_to_send) {
                                         fprintf(stderr, "complete_http_reply: Error in get_img\n");
                                         return -1;
@@ -744,7 +667,7 @@ int init(int argc, char **argv){
     int perc = 50;
     int port = get_opt(argc, argv,&perc);
 
-    if (!mkdtemp(img_home) || !mkdtemp(img_cache))
+    if (!mkdtemp(img_to_home) || !mkdtemp(img_in_cache))
         error_found("Error in mkdtemp\n");
     creat_imgList_html(perc);
     creat_reply_error();
