@@ -8,7 +8,7 @@
 
 extern FILE *log_file;
 
-char * get_dev_info(const char *user_agent);
+
 void parse_http(char *s, char **d);
 int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t *dim_t);
 void creat_reply_error();

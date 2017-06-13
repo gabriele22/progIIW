@@ -31,15 +31,15 @@
 // Struct which contains all cache references with related quality factors
 struct cache {
 
-    int q;
-    char img_q[DIM / 2];
-    size_t size_q;
-    struct cache *next_img_c;
+    int q; //resized img q factor
+    char img_q[DIM / 2]; //resized img name
+    size_t size_q;  //resized img_size
+    struct cache *next_img_c; // next node with a different quality factor for the same image
 };
 
 // Struct to keep trace of images requests in the correct order (referred to the last request)
 struct cache_hit {
-    char cache_name[DIM / 2];
+    char cache_name[DIM / 2]; //name of the resized image, corresponding to resized img name in the cache node
     struct cache_hit *next_hit;
 };
 

@@ -27,7 +27,7 @@ char *get_time(void) {
         k[strlen(k) - 1] = '\0';
     return k;
 }
-//writes on stdout and on file log_file
+//writes on file log_file
 void write_fstream(char *s, FILE *file) {
     fprintf(file,"%s\n\n",s);
     fseek(file, sizeof(s),SEEK_CUR);
@@ -291,7 +291,7 @@ void check_stdin(int listensd, int active_conn) {
 }
 
 
-// Used to fill the structure buf with file or directory information (1 for check directory, 0 for check regular files)
+// Used to fill the structure buf with file or directory information (1 to check for directory, 0 to check for regular files)
 void ctrl_stat(struct stat *buf, char *path, int check) {
     memset(buf, (int) '\0', sizeof(struct stat));
     errno = 0;

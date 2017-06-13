@@ -29,7 +29,7 @@ void clean_resources() {
     remove_directory(img_in_cache);
 }
 
-// Insert image into the list
+// Insert image into the list, creating a new node with the appropriate info and putting it into the list
 void insert_img(struct image **h, char *path) {
     char new_path[DIM];
     memset(new_path, (int) '\0', DIM);
@@ -45,22 +45,25 @@ void insert_img(struct image **h, char *path) {
         strcpy(k->name, ++name);
     }
 
+    //check whether the path refers to a regular file or not
     struct stat statbuf;
     ctrl_stat(&statbuf, path, 0);
 
     k->size_r = (size_t) statbuf.st_size;
     k->img_c = NULL;
 
+    //first insert --> empty list
     if (!*h) {
         k->next_img = *h;
         *h = k;
     } else {
+        //put k node at the head of the list, *h points to the head of the list
         k->next_img = (*h)->next_img;
         (*h)->next_img = k;
     }
 }
 
-// Used to build the HTML file with images tags
+// Used to build the HTML file adding images tags
 void add_img_tag(char *s, char **html, size_t *dim) {
     char *k = "<div align=\"center\"><b>IMAGE NAME: </b><p style=\"color:#0066FF; display:inline;\">%s</p><br><br><a href=\"%s\"><img src=\"%s/%s\" height=\"530\" weight=\"530\"></a><br><br><br><br></div>";
 
@@ -89,6 +92,7 @@ void creat_imgList_html(int perc) {
 
     DIR *dirCorr;
     struct dirent *entCurr;
+    //modifies img_list head pointer by coping its address in the local variable  i
     struct image **i = &img;
     size_t dim = 4;
     char *html = malloc((size_t) dim * DIM * sizeof(char));
@@ -111,14 +115,18 @@ void creat_imgList_html(int perc) {
             error_found("Permission denied\n");
         error_found("creat_imgList_html: Impossible to open current directory\n");
     }
+    // runs over current working directory entries looking for favicon.ico
     while ((entCurr = readdir(dirCorr)) != NULL) {
         if (entCurr->d_type == DT_REG) {
             if (!strcmp(entCurr->d_name, "favicon.ico")) {
                 char pathFav[DIM], pwd[DIM];
+                // get current working directory path
                 if (getcwd(pwd, sizeof(pwd)) == NULL)
                     perror("creat_imgList_html: not able to get current directory path");
                 sprintf(pathFav, "%s/%s", pwd, entCurr->d_name);
+                // if found insert favicon.ico in the img_list;
                 insert_img(i, pathFav);
+                //*i points to the newly inserted node, put at the head of the list
                 i = &(*i)->next_img;
                 break;
 
@@ -161,6 +169,7 @@ void creat_imgList_html(int perc) {
             char command[DIM * 2];
             memset(command, (int) '\0', DIM * 2);
             sprintf(input, "%s/%s", src_path, ent->d_name);
+            //set resized image output path to home temporary folder path
             sprintf(output, "%s/%s", img_to_home, ent->d_name);
             sprintf(command, convert, input, perc, output);
             //operation made by imagemagick
@@ -169,6 +178,7 @@ void creat_imgList_html(int perc) {
 
             insert_img(i, output);
             i = &(*i)->next_img;
+            // add img tag to the html body
             add_img_tag(ent->d_name, &html, &dim);
         }
     }
@@ -266,6 +276,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
         h += strlen(*http_rep);
         memcpy(h, HTML[2], strlen(HTML[2]));
 
+
         strcat(log_string,"400 Bad Request");
         *dim_t=strlen(*http_rep);
         return 0;
@@ -317,7 +328,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                     while (c) {
                         if (c->q == q) {
                             strcpy(name_cached_img, c->img_q);
-                            // If an image has been accessed, move it on top of the list
+                            // If an image has been accessed, updates cache chronology moving it on top of the list
                             //  in order to keep the image with less hit in the bottom of the list
                             if (cache_size >= 0 && strncmp(cache_hit_head->cache_name, name_cached_img, strlen(name_cached_img))) {
                                 struct cache_hit *prev_node, *node;
@@ -327,11 +338,13 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                                     if (!strncmp(node->cache_name, name_cached_img, strlen(name_cached_img))) {
                                         if (prev_node) {
                                             prev_node->next_hit = node->next_hit;
-                                        } else {
+                                        } else { //if found in tail (oldest request) modify tail global pointer
                                             cache_hit_tail = cache_hit_tail->next_hit;
                                         }
                                         node->next_hit = cache_hit_head->next_hit;
+                                        //modify head next hit
                                         cache_hit_head->next_hit = node;
+                                        //modify head global pointer
                                         cache_hit_head = cache_hit_head->next_hit;
                                         break;
                                     }
@@ -343,7 +356,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                         }
                         c = c->next_img_c;
                     }
-
+                    // img with the requested quality factor, not found in cache
                     if (!c) {
                         // %s = image's name; %d = factor quality (between 1 and 99)
                         sprintf(name_cached_img, "%s_%d", p_name, q);
@@ -469,6 +482,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                             new_entry->size_q = (size_t) buf.st_size;
                             new_entry->next_img_c = i->img_c;
                             i->img_c = new_entry;
+                            //keep updated the local pointer c to the head of the cache entries for the specific image
                             c = i->img_c;
 
                             // To find and delete oldest hits
@@ -602,7 +616,7 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                 h += strlen(*http_rep);
                 memcpy(h, HTML[1], strlen(HTML[1]));
             }
-            printf("%s\n", *http_rep);
+            
             strcat(log_string,"404 Not Found");
             *dim_t=strlen(*http_rep);
         }else strcat(log_string,"200 OK");
