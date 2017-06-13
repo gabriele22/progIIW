@@ -11,6 +11,7 @@ extern FILE *log_file;
 
 
 
+
 int remove_directory(const char *path);
 void remove_file(char *path);
 char *get_img(char *name, size_t img_dim, char *directory);

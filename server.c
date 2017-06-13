@@ -156,6 +156,7 @@ void start_multiplexing_io(int listensd){
                 continue;
         }
 
+
         /* Checks whether active socket are readable or not */
         for (i = 0; i <= maxi; i++) {
             if ((socksd = client[i]) < 0 )

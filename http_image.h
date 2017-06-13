@@ -9,6 +9,7 @@
 extern FILE *log_file;
 
 
+
 void parse_http(char *s, char **d);
 int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t *dim_t);
 void creat_reply_error();

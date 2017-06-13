@@ -238,6 +238,7 @@ FILE *open_file() {
     return f;
 }
 
+
 // Ignore SIGPIPE sent from send function
 void catch_signal(void) {
     struct sigaction sa;

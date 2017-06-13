@@ -37,6 +37,7 @@ struct cache {
     struct cache *next_img_c; // next node with a different quality factor for the same image
 };
 
+
 // Struct to keep trace of images requests in the correct order (referred to the last request)
 struct cache_hit {
     char cache_name[DIM / 2]; //name of the resized image, corresponding to resized img name in the cache node

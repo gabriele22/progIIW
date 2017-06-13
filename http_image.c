@@ -547,7 +547,6 @@ int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t 
                     }
 
 
-
                     if (strncmp(line[0], "HEAD", 4)) {
                         DIR *dir;
                         struct dirent *ent;
