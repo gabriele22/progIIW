@@ -7,6 +7,8 @@
 FILE *log_file = NULL;
 volatile int cache_size=0;
 char src_path[DIM / 2];
+pid_t pid;
+int pipefd[2];
 
 
 
@@ -29,10 +31,12 @@ char *get_time(void) {
 }
 //writes on file log_file
 void write_fstream(char *s, FILE *file) {
-    fprintf(file,"%s\n\n",s);
+    fprintf(file,"%s\n",s);
     fseek(file, sizeof(s),SEEK_CUR);
     memset(s,(int)'\0',MAXLINE);
 }
+
+
 
 /*prints on stderr and updates log_file file when an error occours */
 void error_found(char *s) {
@@ -48,6 +52,98 @@ void error_found(char *s) {
     clean_resources();
 
     exit(EXIT_FAILURE);
+}
+//send string to pipe (avoid incomplete write)
+void write_pipe(char *s, int fd){
+
+    int size = (int) (strlen(s));
+
+    while(size>0) {
+        int rc = (int) write(fd, s, (size_t) size);
+        if (rc==-1) {
+            error_found("write pipe: error write\n");
+        }
+        s+=rc ;
+        size-=rc ;
+    }
+
+}
+
+//send int to pipe
+void write_int(int n, int fd){
+
+    int rc = (int) write(fd, &n, sizeof(n));
+    if ( rc == sizeof ( n ) )
+        return ;
+    if ( rc == -1 && errno != EINTR ) {
+        error_found("write_int: error write -1 o eintr\n");
+    }
+    error_found("write_int: error write\n");
+}
+
+//read int from pipe
+int read_int(int fd)
+{
+    size_t len = sizeof ( int) ;
+    int rc , v ;
+    char * p = ( char *) & v ;
+    do {
+        rc = (int) read (fd , p , len );
+        if ( rc == -1) {
+            error_found("read_int: error read");
+        }
+        if ( rc == 0) {
+            return 0;
+        }
+        len -= rc ;
+        p += rc ;
+    } while ( len > 0) ;
+    return v ;
+}
+//read string from pipe (avoid incomplete read)
+void read_pipe(int fd, int size, char *q) {
+
+    while (size > 0) {
+        int rc = (int) read(fd, q, (size_t) size);
+        if (rc == -1) {
+            error_found("read_pipe: error  read -1\n");
+        }
+        if (rc == 0) {
+            error_found("read_pipe: error read 0\n");
+        }
+        q += rc;
+        size -= rc;
+    }
+}
+//child read from pipe and write on log file
+void child_work(void){
+
+    if (close(pipefd[1]) == -1) {
+        error_found("child_work: error close writing pipe\n");
+    }
+
+    for(;;){
+        int n= read_int(pipefd[0]);
+        if(n==0) continue;
+        else {
+
+            char buf[DIM * 2];
+            read_pipe(pipefd[0], n, buf);
+            if (strncmp(buf, "close",5) == 0) {
+                printf("Please wait...\n ");
+                break;
+            }
+            char *slash= strchr(buf,'/');
+            slash=slash;
+            strcat(buf,"\0");
+            write_fstream(buf, log_file);
+        }
+
+    }
+    if (close(pipefd[0]) == -1) {
+        error_found("child_work: error close reading pipe \n");
+    }
+    exit(EXIT_SUCCESS);
 }
 
 
@@ -264,6 +360,18 @@ void check_stdin(int listensd, int active_conn) {
         if (cmd[0] == 's' || cmd[0] == 'S') {
             fprintf(stdout, "Number of current connections: %d\n\n", active_conn);
         }else if (cmd[0] == 'q' || cmd[0] == 'Q') {
+
+            char *cl= "close";
+            write_int((int)strlen(cl),pipefd[1]);
+
+            write_pipe(cl,pipefd[1]);
+            sleep(1);
+
+            if (close(pipefd[1])== -1 )
+               error_found("check_stdin: error close\n");
+
+            fflush(log_file);
+            wait(NULL);
             fprintf(stdout, "Closing server\n");
 
             errno = 0;
@@ -286,8 +394,9 @@ void check_stdin(int listensd, int active_conn) {
 
             clean_resources();
             exit(EXIT_SUCCESS);
-        }
-        else printf("\n%s\n", user_command);
+        }else if (cmd[0] == 'f' || cmd[0] == 'F') {
+            fflush(log_file);
+        }else printf("\n%s\n", user_command);
     }
 }
 

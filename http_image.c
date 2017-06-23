@@ -174,7 +174,7 @@ void creat_imgList_html(int perc) {
             sprintf(command, convert, input, perc, output);
             //operation made by imagemagick
             if (system(command))
-                error_found("creat_imgList_html:imagemagick package is required\\nUSE 'make packages' COMMAND TO INSTALL IT\n");
+                error_found("creat_imgList_html:imagemagick package is required\nUSE 'make packages' COMMAND TO INSTALL IT\n");
 
             insert_img(i, output);
             i = &(*i)->next_img;
@@ -676,6 +676,7 @@ void parse_http(char *s, char **d) {
 
 int init(int argc, char **argv){
 
+    catch_signal();
     log_file= open_file();
     int perc = 50;
     int port = get_opt(argc, argv,&perc);

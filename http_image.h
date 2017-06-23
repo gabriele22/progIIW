@@ -7,9 +7,15 @@
 
 
 extern FILE *log_file;
+extern pid_t pid;
+extern int pipefd[2];
 
-
-
+void child_work(void);
+void catch_signal(void);
+char * read_pipe(int fd, int size, char *q);
+void write_int(int n, int fd);
+int read_int(int fd);
+void write_pipe(char *s, int fd);
 void parse_http(char *s, char **d);
 int complete_http_reply(char **line, char *log_string, char **http_rep, ssize_t *dim_t);
 void creat_reply_error();

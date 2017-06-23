@@ -62,7 +62,7 @@ int listen_connections(int port) {
     return listensd;
 }
 
-void start_multiplexing_io(int listensd){
+void start_multiplexing_io(int listensd, int pipefd[2]){
 
     int			connsd, socksd;
     int			i,x;
@@ -169,8 +169,6 @@ void start_multiplexing_io(int listensd){
                 for (x = 0; x < 7; ++x)
                     line_req[x] = NULL;
 
-
-
                 if (ctrl_recv(socksd, http_req, 5 * DIM, 0)==0) {
                     //If it reads EOF, closes the connection descriptor
                     if (close(socksd) == -1)
@@ -196,7 +194,11 @@ void start_multiplexing_io(int listensd){
                         memset(&dim_reply, (int) '\0', sizeof(ssize_t));
 
                         strcat(log_string,dim_string);
-                        write_fstream(log_string,log_file);
+                        strcat(log_string,"\0");
+
+                        int n= (int) (strlen(log_string)*sizeof(char));
+                        write_int(n,pipefd[1]);
+                        write_pipe(log_string, pipefd[1]);
                     }else free(http_reply);
                     if (--ready <= 0) break;
                 }
@@ -208,14 +210,28 @@ void start_multiplexing_io(int listensd){
 
 }
 
-
 int main(int argc, char **argv)
 {
     //function used to initialize parameters option, create services file and directories
-    int port= init(argc,argv);
-    //set server in listening state
-    int listensd= listen_connections(port);
-    //the core of server based on events
-    start_multiplexing_io(listensd);
+    int port = init(argc, argv);
+    //pipe used to comunicate log strings to the child process
+    if(pipe(pipefd)==-1){
+        error_found("error create pipe\n");
+    }
+
+    pid = fork();
+    if(pid==-1)
+        error_found("error spawn child\n");
+    if(pid==0) {
+        //the child is responsible for scriptures on log file
+        child_work();
+    }else {
+        if (close(pipefd[0])== -1)
+          error_found("error close reading pipe\n");
+        //set server in listening state
+        int listensd = listen_connections(port);
+        //the core of server based on events
+        start_multiplexing_io(listensd, pipefd);
+    }
 
 }
